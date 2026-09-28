@@ -23,7 +23,8 @@ import {
   Check,
   Copy,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 
 const socket = io('http://localhost:3001');
@@ -88,11 +89,14 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Menús con Hover / Auto-Cierre
+  // Menús con Grace Delay
   const [showInviteMenu, setShowInviteMenu] = useState(false);
   const [showSwitchRoomInput, setShowSwitchRoomInput] = useState(false);
   const [switchRoomCode, setSwitchRoomCode] = useState('');
   const [showParticipantsTooltip, setShowParticipantsTooltip] = useState(false);
+
+  const inviteTimerRef = useRef(null);
+  const switchTimerRef = useRef(null);
 
   // Player State
   const [currentVideo, setCurrentVideo] = useState(null);
@@ -102,9 +106,10 @@ export default function App() {
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const playerRef = useRef(null);
 
-  // Chat & Reactions State
+  // Chat & Emoji Selector
   const [messages, setMessages] = useState([]);
   const [inputMsg, setInputMsg] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [activeReactions, setActiveReactions] = useState([]);
   const chatBottomRef = useRef(null);
 
@@ -165,7 +170,7 @@ export default function App() {
 
     socket.on('room_error', (data) => {
       setRoomError(data.message);
-      setUser(null); // Redirigir al inicio si la sala no existe
+      setUser(null);
     });
 
     socket.on('users_count', (count) => setConnectedCount(count));
@@ -195,17 +200,24 @@ export default function App() {
     });
 
     socket.on('sync_play', (time) => {
-      if (playerRef.current) {
-        if (time !== undefined) playerRef.current.seekTo(time);
+      if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+        if (time !== undefined && typeof playerRef.current.getCurrentTime === 'function') {
+          const currentTime = playerRef.current.getCurrentTime();
+          if (Math.abs(currentTime - time) > 1.0) {
+            playerRef.current.seekTo(time, true);
+          }
+        }
         playerRef.current.playVideo();
       }
       setIsPlaying(true);
     });
 
     socket.on('sync_pause', (time) => {
-      if (playerRef.current) {
-        if (time !== undefined) playerRef.current.seekTo(time);
+      if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
         playerRef.current.pauseVideo();
+        if (time !== undefined && typeof playerRef.current.seekTo === 'function') {
+          playerRef.current.seekTo(time, true);
+        }
       }
       setIsPlaying(false);
     });
@@ -225,9 +237,39 @@ export default function App() {
     };
   }, [user, roomId, isCreatingNewRoom]);
 
+  // Recarga forzada del reproductor
+  useEffect(() => {
+    if (currentVideo && playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+      playerRef.current.loadVideoById(currentVideo.url);
+    }
+  }, [currentVideo]);
+
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Manejadores de Hover con Grace Delay
+  const handleMouseEnterInvite = () => {
+    if (inviteTimerRef.current) clearTimeout(inviteTimerRef.current);
+    setShowInviteMenu(true);
+  };
+
+  const handleMouseLeaveInvite = () => {
+    inviteTimerRef.current = setTimeout(() => {
+      setShowInviteMenu(false);
+    }, 250);
+  };
+
+  const handleMouseEnterSwitch = () => {
+    if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
+    setShowSwitchRoomInput(true);
+  };
+
+  const handleMouseLeaveSwitch = () => {
+    switchTimerRef.current = setTimeout(() => {
+      setShowSwitchRoomInput(false);
+    }, 250);
+  };
 
   const extractVideoId = (url) => {
     if (!url) return null;
@@ -292,7 +334,7 @@ export default function App() {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || !user) return;
-    socket.emit('send_message', { user: user.username, text: inputMsg });
+    socket.emit('send_message', { user: user.username, text: inputMsg, isSystem: false });
     setInputMsg('');
   };
 
@@ -325,12 +367,13 @@ export default function App() {
       addedBy: user.username,
     });
 
+    // Limpiar el campo de texto inmediatamente
     setNewVideoUrl('');
   };
 
   const togglePlayPause = () => {
     if (!isHost || !playerRef.current) return;
-    const currentTime = playerRef.current.getCurrentTime();
+    const currentTime = typeof playerRef.current.getCurrentTime === 'function' ? playerRef.current.getCurrentTime() : 0;
     if (isPlaying) {
       socket.emit('host_pause', currentTime);
       setIsPlaying(false);
@@ -475,11 +518,11 @@ export default function App() {
           <div className="flex items-center gap-2">
             <h1 className="font-bold text-base tracking-wide text-white">MixHost</h1>
             
-            {/* BADGE DE SALA Y MENÚ INVITAR CON AUTO-CIERRE EN HOVER */}
+            {/* BADGE DE SALA Y MENÚ INVITAR */}
             <div
-              className="relative"
-              onMouseEnter={() => setShowInviteMenu(true)}
-              onMouseLeave={() => setShowInviteMenu(false)}
+              className="relative py-2"
+              onMouseEnter={handleMouseEnterInvite}
+              onMouseLeave={handleMouseLeaveInvite}
             >
               <div className="flex items-center gap-2 bg-purple-600/20 border border-purple-500/30 px-3 py-1 rounded-xl cursor-pointer">
                 <span className="text-purple-400 font-mono font-bold text-xs">#{roomId}</span>
@@ -489,78 +532,87 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Menú desplegable claro y directo */}
               {showInviteMenu && (
-                <div className="absolute left-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 border-b border-slate-800 pb-1.5">
-                    Opciones de Invitación
-                  </p>
-                  <div className="space-y-2">
-                    <button
-                      onClick={handleCopyLink}
-                      className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-purple-300">Copiar Enlace Directo</span>
-                        <span className="text-[10px] text-slate-400">Para abrir directamente en navegador</span>
-                      </div>
-                      {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
-                    </button>
+                <div
+                  className="absolute left-0 top-full pt-1 w-72 z-50"
+                  onMouseEnter={handleMouseEnterInvite}
+                  onMouseLeave={handleMouseLeaveInvite}
+                >
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 border-b border-slate-800 pb-1.5">
+                      Opciones de Invitación
+                    </p>
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleCopyLink}
+                        className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-purple-300">Copiar Enlace Directo</span>
+                          <span className="text-[10px] text-slate-400">Para abrir directamente en navegador</span>
+                        </div>
+                        {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+                      </button>
 
-                    <button
-                      onClick={handleCopyCode}
-                      className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-purple-300">Copiar Código de Sala</span>
-                        <span className="text-[10px] text-slate-400">Para pegar dentro de la app ({roomId})</span>
-                      </div>
-                      {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
-                    </button>
+                      <button
+                        onClick={handleCopyCode}
+                        className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-purple-300">Copiar Código de Sala</span>
+                          <span className="text-[10px] text-slate-400">Para pegar dentro de la app ({roomId})</span>
+                        </div>
+                        {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* BOTÓN INGRESAR CÓDIGO CON AUTO-CIERRE EN HOVER */}
+            {/* BOTÓN INGRESAR CÓDIGO */}
             <div
-              className="relative ml-2"
-              onMouseEnter={() => setShowSwitchRoomInput(true)}
-              onMouseLeave={() => setShowSwitchRoomInput(false)}
+              className="relative ml-2 py-2"
+              onMouseEnter={handleMouseEnterSwitch}
+              onMouseLeave={handleMouseLeaveSwitch}
             >
-              <button
-                className="text-xs bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 px-2.5 py-1 rounded-xl text-slate-300 transition"
-              >
+              <button className="text-xs bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 px-2.5 py-1 rounded-xl text-slate-300 transition">
                 Ingresar Código
               </button>
 
               {showSwitchRoomInput && (
-                <form
-                  onSubmit={handleSwitchRoom}
-                  className="absolute left-0 top-full mt-2 w-60 bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-2xl z-50 flex gap-2 animate-in fade-in zoom-in-95 duration-150"
+                <div
+                  className="absolute left-0 top-full pt-1 w-60 z-50"
+                  onMouseEnter={handleMouseEnterSwitch}
+                  onMouseLeave={handleMouseLeaveSwitch}
                 >
-                  <input
-                    type="text"
-                    value={switchRoomCode}
-                    onChange={(e) => setSwitchRoomCode(e.target.value)}
-                    placeholder="Pegar código aquí..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    className="bg-purple-600 hover:bg-purple-500 text-white p-1.5 rounded-xl transition"
+                  <form
+                    onSubmit={handleSwitchRoom}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-2xl flex gap-2 animate-in fade-in zoom-in-95 duration-150"
                   >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </form>
+                    <input
+                      type="text"
+                      value={switchRoomCode}
+                      onChange={(e) => setSwitchRoomCode(e.target.value)}
+                      placeholder="Pegar código aquí..."
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="bg-purple-600 hover:bg-purple-500 text-white p-1.5 rounded-xl transition"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </form>
+                </div>
               )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          {/* BADGE DE CONECTADOS CON HOVER DROPDOWN */}
+          {/* BADGE DE CONECTADOS */}
           <div
             className="relative"
             onMouseEnter={() => setShowParticipantsTooltip(true)}
@@ -620,19 +672,36 @@ export default function App() {
           <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group">
             {currentVideo ? (
               <YouTube
+                key={currentVideo.id || currentVideo.url}
                 videoId={currentVideo.url}
                 className="w-full h-full"
                 iframeClassName="w-full h-full"
                 opts={{
                   playerVars: {
                     autoplay: 1,
-                    controls: isHost ? 1 : 0,
+                    controls: 1,
                     modestbranding: 1,
+                    enablejsapi: 1,
                   },
                 }}
                 onReady={(e) => {
                   playerRef.current = e.target;
-                  e.target.setVolume(volume);
+                  if (typeof e.target.setVolume === 'function') {
+                    e.target.setVolume(volume);
+                  }
+                  e.target.playVideo().catch(() => {
+                    console.log('Autoplay requiere interacción del usuario.');
+                  });
+                }}
+                onStateChange={(e) => {
+                  if (isHost && playerRef.current) {
+                    const currentTime = e.target.getCurrentTime();
+                    if (e.data === 1) {
+                      socket.emit('host_play', currentTime);
+                    } else if (e.data === 2) {
+                      socket.emit('host_pause', currentTime);
+                    }
+                  }
                 }}
               />
             ) : (
@@ -762,28 +831,60 @@ export default function App() {
             </button>
           </div>
 
-          {/* PESTAÑA 1: CHAT */}
+          {/* PESTAÑA 1: CHAT + MODO SISTEMA + SELECTOR EMOJIS */}
           {activeTab === 'chat' && (
-            <div className="flex-1 flex flex-col justify-between overflow-hidden">
+            <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
               <div className="flex-1 p-4 overflow-y-auto space-y-3">
                 {messages.length === 0 ? (
                   <p className="text-center text-xs text-slate-600 my-8">
                     No hay mensajes aún. ¡Sé el primero en saludar!
                   </p>
                 ) : (
-                  messages.map((m) => (
-                    <div key={m.id} className="flex flex-col text-xs">
-                      <span className="text-[10px] text-purple-400 font-semibold mb-0.5">{m.user}</span>
-                      <div className="bg-slate-800/70 border border-slate-700/40 rounded-2xl rounded-tl-none px-3.5 py-2 text-slate-200 max-w-[85%] self-start break-words shadow-sm">
-                        {m.text}
+                  messages.map((m, idx) => (
+                    m.isSystem ? (
+                      <div key={m.id || idx} className="flex items-center justify-center gap-1.5 text-[11px] text-purple-400/80 my-1 bg-purple-950/20 py-1 px-3 rounded-full border border-purple-800/20">
+                        <Info className="w-3 h-3 flex-shrink-0" />
+                        <span>{m.text}</span>
                       </div>
-                    </div>
+                    ) : (
+                      <div key={m.id || idx} className="flex flex-col text-xs">
+                        <span className="text-[10px] text-purple-400 font-semibold mb-0.5">{m.user}</span>
+                        <div className="bg-slate-800/70 border border-slate-700/40 rounded-2xl rounded-tl-none px-3.5 py-2 text-slate-200 max-w-[85%] self-start break-words shadow-sm">
+                          {m.text}
+                        </div>
+                      </div>
+                    )
                   ))
                 )}
                 <div ref={chatBottomRef} />
               </div>
 
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-900/80 flex gap-2">
+              {/* Selector de Emojis Rápido */}
+              {showEmojiPicker && (
+                <div className="absolute bottom-16 left-3 right-3 bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-2xl grid grid-cols-6 gap-2 z-50">
+                  {['😊', '🚀', '⭐', '🎶', '😎', '🍿', '🔥', '❤️', '👍', '🥳', '💯', '🙌'].map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => {
+                        setInputMsg((prev) => prev + emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="p-2 hover:bg-slate-800 rounded-xl text-center text-lg transition"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-900/80 flex gap-2 items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded-xl transition"
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
                 <input
                   type="text"
                   value={inputMsg}
@@ -801,7 +902,7 @@ export default function App() {
             </div>
           )}
 
-          {/* PESTAÑA 2: COLA DE VIDEOS */}
+          {/* PESTAÑA 2: COLA DE VIDEOS (SOLO URL DIRECTA CON AUTO-LIMPIEZA) */}
           {activeTab === 'queue' && (
             <div className="flex-1 flex flex-col overflow-hidden p-4 space-y-4">
               <form onSubmit={handleAddVideo} className="space-y-2">
