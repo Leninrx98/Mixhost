@@ -1,79 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import YouTube from 'react-youtube';
 import io from 'socket.io-client';
 import {
   MessageSquare,
-  Users,
-  Play,
-  Pause,
-  SkipForward,
-  SkipBack,
-  Smile,
-  Send,
   Plus,
   Tv,
-  Crown,
-  Volume2,
-  VolumeX,
   Sparkles,
   TrendingUp,
   CheckCircle2,
-  Lock,
-  Share2,
-  Check,
-  Copy,
-  ArrowRight,
-  ShieldAlert,
-  Info
+  ShieldAlert
 } from 'lucide-react';
+
+import Header, { OctopusIcon } from './components/Header';
+import VideoPlayer from './components/VideoPlayer';
+import ChatPanel from './components/ChatPanel';
+import QueuePanel from './components/QueuePanel';
 
 const socket = io('http://localhost:3001');
 
-// Componente del Icono de Pulpito (Mascota MixHost)
-const OctopusIcon = ({ className = "w-8 h-8" }) => (
-  <svg
-    viewBox="0 0 64 64"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <path
-      d="M32 6C18.7452 6 8 16.7452 8 30C8 37.5 11.5 44 17 48V52C17 54.2091 18.7909 56 21 56C23.2091 56 25 54.2091 25 52V50C27.2 50.6 29.5 51 32 51C34.5 51 36.8 50.6 39 50V52C39 54.2091 40.7909 56 43 56C45.2091 56 47 54.2091 47 52V48C52.5 44 56 37.5 56 30C56 16.7452 45.2548 6 32 6Z"
-      fill="url(#octo_grad)"
-    />
-    <circle cx="23" cy="28" r="4.5" fill="#FFFFFF" />
-    <circle cx="23" cy="28" r="2" fill="#0F172A" />
-    <circle cx="41" cy="28" r="4.5" fill="#FFFFFF" />
-    <circle cx="41" cy="28" r="2" fill="#0F172A" />
-    <path
-      d="M27 36C27 36 29.5 39 32 39C34.5 39 37 36 37 36"
-      stroke="#FFFFFF"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-    />
-    <path
-      d="M13 46C11 49 10 53 12 56C14 59 18 57 19 53"
-      stroke="#9333EA"
-      strokeWidth="3"
-      strokeLinecap="round"
-    />
-    <path
-      d="M51 46C53 49 54 53 52 56C50 59 46 57 45 53"
-      stroke="#9333EA"
-      strokeWidth="3"
-      strokeLinecap="round"
-    />
-    <defs>
-      <linearGradient id="octo_grad" x1="8" y1="6" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#C084FC" />
-        <stop offset="1" stopColor="#7E22CE" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
-
 export default function App() {
-  // Login & Room Setup State
   const [user, setUser] = useState(null);
   const [tempName, setTempName] = useState('');
   const [roomId, setRoomId] = useState('');
@@ -81,7 +25,6 @@ export default function App() {
   const [isCreatingNewRoom, setIsCreatingNewRoom] = useState(false);
   const [roomError, setRoomError] = useState(null);
 
-  // Sync & Room State
   const [isHost, setIsHost] = useState(false);
   const [connectedCount, setConnectedCount] = useState(1);
   const [participants, setParticipants] = useState([]);
@@ -89,7 +32,6 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Menús con Grace Delay
   const [showInviteMenu, setShowInviteMenu] = useState(false);
   const [showSwitchRoomInput, setShowSwitchRoomInput] = useState(false);
   const [switchRoomCode, setSwitchRoomCode] = useState('');
@@ -98,7 +40,6 @@ export default function App() {
   const inviteTimerRef = useRef(null);
   const switchTimerRef = useRef(null);
 
-  // Player State
   const [currentVideo, setCurrentVideo] = useState(null);
   const [videoQueue, setVideoQueue] = useState([]);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -106,17 +47,14 @@ export default function App() {
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const playerRef = useRef(null);
 
-  // Chat & Emoji Selector
   const [messages, setMessages] = useState([]);
   const [inputMsg, setInputMsg] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [activeReactions, setActiveReactions] = useState([]);
   const chatBottomRef = useRef(null);
 
-  // UI Tabs
   const [activeTab, setActiveTab] = useState('chat');
 
-  // Prediction State
   const [prediction, setPrediction] = useState({
     question: '¿Qué canción vendrá a continuación?',
     optionA: 'Pop / Reggaeton Hits',
@@ -126,7 +64,6 @@ export default function App() {
     userVoted: null,
   });
 
-  // Session ID único por pestaña
   const tabSessionIdRef = useRef('');
   if (!tabSessionIdRef.current) {
     let sId = sessionStorage.getItem('mixhost_session_id');
@@ -137,7 +74,6 @@ export default function App() {
     tabSessionIdRef.current = sId;
   }
 
-  // Leer la sala desde la URL si existe
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
@@ -146,7 +82,6 @@ export default function App() {
     }
   }, []);
 
-  // Escuchadores de Socket.io
   useEffect(() => {
     if (!user || !roomId) return;
 
@@ -237,7 +172,6 @@ export default function App() {
     };
   }, [user, roomId, isCreatingNewRoom]);
 
-  // Recarga forzada del reproductor
   useEffect(() => {
     if (currentVideo && playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
       playerRef.current.loadVideoById(currentVideo.url);
@@ -248,7 +182,6 @@ export default function App() {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Manejadores de Hover con Grace Delay
   const handleMouseEnterInvite = () => {
     if (inviteTimerRef.current) clearTimeout(inviteTimerRef.current);
     setShowInviteMenu(true);
@@ -367,7 +300,6 @@ export default function App() {
       addedBy: user.username,
     });
 
-    // Limpiar el campo de texto inmediatamente
     setNewVideoUrl('');
   };
 
@@ -403,7 +335,6 @@ export default function App() {
     }));
   };
 
-  // VISTA 1: LOGIN
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950">
@@ -493,10 +424,8 @@ export default function App() {
     );
   }
 
-  // VISTA 2: INTERFAZ PRINCIPAL DE LA SALA
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-purple-500 selection:text-white">
-      {/* Reacciones Flotantes */}
       <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
         {activeReactions.map((r) => (
           <div
@@ -509,290 +438,46 @@ export default function App() {
         ))}
       </div>
 
-      {/* HEADER */}
-      <header className="h-16 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-950 border border-purple-500/30 rounded-xl flex items-center justify-center shadow-md shadow-purple-500/20">
-            <OctopusIcon className="w-7 h-7" />
-          </div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-bold text-base tracking-wide text-white">MixHost</h1>
-            
-            {/* BADGE DE SALA Y MENÚ INVITAR */}
-            <div
-              className="relative py-2"
-              onMouseEnter={handleMouseEnterInvite}
-              onMouseLeave={handleMouseLeaveInvite}
-            >
-              <div className="flex items-center gap-2 bg-purple-600/20 border border-purple-500/30 px-3 py-1 rounded-xl cursor-pointer">
-                <span className="text-purple-400 font-mono font-bold text-xs">#{roomId}</span>
-                <button className="flex items-center gap-1 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-lg transition-all ml-1 shadow-sm active:scale-95">
-                  <Share2 className="w-3 h-3" />
-                  <span>Invitar</span>
-                </button>
-              </div>
+      <Header
+        roomId={roomId}
+        user={user}
+        isHost={isHost}
+        connectedCount={connectedCount}
+        participants={participants}
+        showInviteMenu={showInviteMenu}
+        handleMouseEnterInvite={handleMouseEnterInvite}
+        handleMouseLeaveInvite={handleMouseLeaveInvite}
+        handleCopyLink={handleCopyLink}
+        handleCopyCode={handleCopyCode}
+        copiedLink={copiedLink}
+        copiedCode={copiedCode}
+        showSwitchRoomInput={showSwitchRoomInput}
+        handleMouseEnterSwitch={handleMouseEnterSwitch}
+        handleMouseLeaveSwitch={handleMouseLeaveSwitch}
+        handleSwitchRoom={handleSwitchRoom}
+        switchRoomCode={switchRoomCode}
+        setSwitchRoomCode={setSwitchRoomCode}
+        showParticipantsTooltip={showParticipantsTooltip}
+        setShowParticipantsTooltip={setShowParticipantsTooltip}
+      />
 
-              {showInviteMenu && (
-                <div
-                  className="absolute left-0 top-full pt-1 w-72 z-50"
-                  onMouseEnter={handleMouseEnterInvite}
-                  onMouseLeave={handleMouseLeaveInvite}
-                >
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 border-b border-slate-800 pb-1.5">
-                      Opciones de Invitación
-                    </p>
-                    <div className="space-y-2">
-                      <button
-                        onClick={handleCopyLink}
-                        className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-purple-300">Copiar Enlace Directo</span>
-                          <span className="text-[10px] text-slate-400">Para abrir directamente en navegador</span>
-                        </div>
-                        {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
-                      </button>
-
-                      <button
-                        onClick={handleCopyCode}
-                        className="w-full flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-800/50 hover:bg-purple-600/20 border border-slate-700/50 hover:border-purple-500/40 text-slate-200 transition text-left"
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-purple-300">Copiar Código de Sala</span>
-                          <span className="text-[10px] text-slate-400">Para pegar dentro de la app ({roomId})</span>
-                        </div>
-                        {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* BOTÓN INGRESAR CÓDIGO */}
-            <div
-              className="relative ml-2 py-2"
-              onMouseEnter={handleMouseEnterSwitch}
-              onMouseLeave={handleMouseLeaveSwitch}
-            >
-              <button className="text-xs bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 px-2.5 py-1 rounded-xl text-slate-300 transition">
-                Ingresar Código
-              </button>
-
-              {showSwitchRoomInput && (
-                <div
-                  className="absolute left-0 top-full pt-1 w-60 z-50"
-                  onMouseEnter={handleMouseEnterSwitch}
-                  onMouseLeave={handleMouseLeaveSwitch}
-                >
-                  <form
-                    onSubmit={handleSwitchRoom}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-2xl flex gap-2 animate-in fade-in zoom-in-95 duration-150"
-                  >
-                    <input
-                      type="text"
-                      value={switchRoomCode}
-                      onChange={(e) => setSwitchRoomCode(e.target.value)}
-                      placeholder="Pegar código aquí..."
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      className="bg-purple-600 hover:bg-purple-500 text-white p-1.5 rounded-xl transition"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </form>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          {/* BADGE DE CONECTADOS */}
-          <div
-            className="relative"
-            onMouseEnter={() => setShowParticipantsTooltip(true)}
-            onMouseLeave={() => setShowParticipantsTooltip(false)}
-          >
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs text-slate-300 cursor-pointer transition">
-              <Users className="w-3.5 h-3.5 text-purple-400" />
-              <span className="font-medium">{connectedCount} conectados</span>
-            </div>
-
-            {showParticipantsTooltip && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-3 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 border-b border-slate-800 pb-1.5">
-                  Integrantes en la sala ({participants.length})
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {participants.length === 0 ? (
-                    <p className="text-xs text-slate-500">Cargando lista...</p>
-                  ) : (
-                    participants.map((p, idx) => (
-                      <div key={p.id || idx} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg hover:bg-slate-800/50">
-                        <div className="flex items-center gap-2 truncate">
-                          <img src={p.avatar} alt="avatar" className="w-5 h-5 rounded-full bg-slate-800 border border-purple-500/30" />
-                          <span className="text-slate-200 font-medium truncate">{p.username}</span>
-                        </div>
-                        {p.isHost && (
-                          <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" title="Host / Creador" />
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-            <img src={user.avatar} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-800 border border-purple-500/30" />
-            <div className="hidden sm:block text-left">
-              <p className="text-xs font-semibold leading-tight flex items-center gap-1 text-slate-100">
-                {user.username}
-                {isHost && <Crown className="w-3 h-3 text-amber-400 fill-amber-400" />}
-              </p>
-              <p className="text-[10px] text-slate-400">{isHost ? 'Anfitrión (Host)' : 'Espectador'}</p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* CONTENIDO PRINCIPAL */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1920px] w-full mx-auto">
-        
-        {/* COLUMNA IZQUIERDA: REPRODUCTOR DE VIDEO Y CONTROLES */}
-        <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4">
-          
-          {/* Pantalla del Reproductor */}
-          <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group">
-            {currentVideo ? (
-              <YouTube
-                key={currentVideo.id || currentVideo.url}
-                videoId={currentVideo.url}
-                className="w-full h-full"
-                iframeClassName="w-full h-full"
-                opts={{
-                  playerVars: {
-                    autoplay: 1,
-                    controls: 1,
-                    modestbranding: 1,
-                    enablejsapi: 1,
-                  },
-                }}
-                onReady={(e) => {
-                  playerRef.current = e.target;
-                  if (typeof e.target.setVolume === 'function') {
-                    e.target.setVolume(volume);
-                  }
-                  e.target.playVideo().catch(() => {
-                    console.log('Autoplay requiere interacción del usuario.');
-                  });
-                }}
-                onStateChange={(e) => {
-                  if (isHost && playerRef.current) {
-                    const currentTime = e.target.getCurrentTime();
-                    if (e.data === 1) {
-                      socket.emit('host_play', currentTime);
-                    } else if (e.data === 2) {
-                      socket.emit('host_pause', currentTime);
-                    }
-                  }
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-6 text-center bg-slate-950/80">
-                <div className="relative mb-4">
-                  <div className="absolute inset-0 bg-purple-600/20 rounded-full blur-xl animate-pulse"></div>
-                  <div className="w-24 h-24 bg-slate-900 border border-purple-500/30 rounded-3xl flex items-center justify-center relative shadow-2xl">
-                    <OctopusIcon className="w-16 h-16 animate-bounce" />
-                  </div>
-                </div>
-                <p className="text-base font-semibold text-slate-300">No hay ningún video reproduciéndose</p>
-                <p className="text-xs text-slate-500 max-w-sm mt-1">
-                  Agrega un enlace de YouTube en la pestaña de <span className="text-purple-400 font-medium">Cola</span> para comenzar la transmisión en vivo.
-                </p>
-              </div>
-            )}
-          </div>
+        <VideoPlayer
+          currentVideo={currentVideo}
+          playerRef={playerRef}
+          volume={volume}
+          isHost={isHost}
+          isPlaying={isPlaying}
+          hasPrevious={hasPrevious}
+          videoQueue={videoQueue}
+          togglePlayPause={togglePlayPause}
+          handlePreviousVideo={handlePreviousVideo}
+          handleNextVideo={handleNextVideo}
+          handleSendReaction={handleSendReaction}
+          socket={socket}
+        />
 
-          {/* Barra de Información del Video & Controles */}
-          <div className="bg-slate-900/60 backdrop-blur border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex-1 min-w-0 text-center sm:text-left">
-              <h2 className="text-sm font-semibold truncate text-white">
-                {currentVideo ? currentVideo.title : 'Esperando contenido...'}
-              </h2>
-              {currentVideo && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy}</span>
-                </p>
-              )}
-            </div>
-
-            {/* Controles de Reproducción */}
-            <div className="flex items-center gap-3">
-              {isHost ? (
-                <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 p-1.5 rounded-xl">
-                  <button
-                    onClick={handlePreviousVideo}
-                    disabled={!hasPrevious}
-                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                    title="Video Anterior"
-                  >
-                    <SkipBack className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={togglePlayPause}
-                    className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-md shadow-purple-600/30 transition transform active:scale-95"
-                    title={isPlaying ? 'Pausar' : 'Reproducir'}
-                  >
-                    {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                  </button>
-
-                  <button
-                    onClick={handleNextVideo}
-                    disabled={videoQueue.length === 0}
-                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-                    title="Siguiente Video"
-                  >
-                    <SkipForward className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
-                  <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Sincronizado con el Host</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Barra de Reacciones Rápidas */}
-          <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-3 flex items-center justify-between gap-2 overflow-x-auto">
-            <span className="text-xs font-semibold text-slate-400 pl-2 whitespace-nowrap">Reaccionar:</span>
-            <div className="flex items-center gap-2">
-              {['🔥', '❤️', '😂', '🎉', '😮', '👏'].map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleSendReaction(emoji)}
-                  className="w-10 h-10 bg-slate-800/50 hover:bg-purple-600/20 hover:border-purple-500/50 border border-slate-700/40 rounded-xl flex items-center justify-center text-lg transition transform active:scale-90"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* COLUMNA DERECHA: PANELS (CHAT / COLA / PREDICCIONES) */}
         <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-slate-900/30 flex flex-col h-[500px] lg:h-auto">
-          
-          {/* Pestañas Lateral */}
           <div className="flex border-b border-slate-800 bg-slate-900/60 p-2 gap-1">
             <button
               onClick={() => setActiveTab('chat')}
@@ -831,121 +516,27 @@ export default function App() {
             </button>
           </div>
 
-          {/* PESTAÑA 1: CHAT + MODO SISTEMA + SELECTOR EMOJIS */}
           {activeTab === 'chat' && (
-            <div className="flex-1 flex flex-col justify-between overflow-hidden relative">
-              <div className="flex-1 p-4 overflow-y-auto space-y-3">
-                {messages.length === 0 ? (
-                  <p className="text-center text-xs text-slate-600 my-8">
-                    No hay mensajes aún. ¡Sé el primero en saludar!
-                  </p>
-                ) : (
-                  messages.map((m, idx) => (
-                    m.isSystem ? (
-                      <div key={m.id || idx} className="flex items-center justify-center gap-1.5 text-[11px] text-purple-400/80 my-1 bg-purple-950/20 py-1 px-3 rounded-full border border-purple-800/20">
-                        <Info className="w-3 h-3 flex-shrink-0" />
-                        <span>{m.text}</span>
-                      </div>
-                    ) : (
-                      <div key={m.id || idx} className="flex flex-col text-xs">
-                        <span className="text-[10px] text-purple-400 font-semibold mb-0.5">{m.user}</span>
-                        <div className="bg-slate-800/70 border border-slate-700/40 rounded-2xl rounded-tl-none px-3.5 py-2 text-slate-200 max-w-[85%] self-start break-words shadow-sm">
-                          {m.text}
-                        </div>
-                      </div>
-                    )
-                  ))
-                )}
-                <div ref={chatBottomRef} />
-              </div>
-
-              {/* Selector de Emojis Rápido */}
-              {showEmojiPicker && (
-                <div className="absolute bottom-16 left-3 right-3 bg-slate-900 border border-slate-800 rounded-2xl p-2.5 shadow-2xl grid grid-cols-6 gap-2 z-50">
-                  {['😊', '🚀', '⭐', '🎶', '😎', '🍿', '🔥', '❤️', '👍', '🥳', '💯', '🙌'].map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => {
-                        setInputMsg((prev) => prev + emoji);
-                        setShowEmojiPicker(false);
-                      }}
-                      className="p-2 hover:bg-slate-800 rounded-xl text-center text-lg transition"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-900/80 flex gap-2 items-center">
-                <button
-                  type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="p-2 hover:bg-slate-800 text-slate-400 hover:text-purple-400 rounded-xl transition"
-                >
-                  <Smile className="w-5 h-5" />
-                </button>
-                <input
-                  type="text"
-                  value={inputMsg}
-                  onChange={(e) => setInputMsg(e.target.value)}
-                  placeholder="Escribe un mensaje..."
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-                />
-                <button
-                  type="submit"
-                  className="bg-purple-600 hover:bg-purple-500 text-white p-2 rounded-xl transition shadow-md shadow-purple-600/20"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
+            <ChatPanel
+              messages={messages}
+              chatBottomRef={chatBottomRef}
+              showEmojiPicker={showEmojiPicker}
+              setShowEmojiPicker={setShowEmojiPicker}
+              inputMsg={inputMsg}
+              setInputMsg={setInputMsg}
+              handleSendMessage={handleSendMessage}
+            />
           )}
 
-          {/* PESTAÑA 2: COLA DE VIDEOS (SOLO URL DIRECTA CON AUTO-LIMPIEZA) */}
           {activeTab === 'queue' && (
-            <div className="flex-1 flex flex-col overflow-hidden p-4 space-y-4">
-              <form onSubmit={handleAddVideo} className="space-y-2">
-                <label className="text-xs font-semibold text-slate-400 block">Agregar video a la cola</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newVideoUrl}
-                    onChange={(e) => setNewVideoUrl(e.target.value)}
-                    placeholder="URL de YouTube..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1 shadow-md shadow-purple-600/20"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </form>
-
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Próximos Videos</h3>
-                {videoQueue.length === 0 ? (
-                  <p className="text-xs text-slate-600 text-center py-6">La cola está vacía.</p>
-                ) : (
-                  videoQueue.map((v, i) => (
-                    <div key={v.id || i} className="bg-slate-800/40 border border-slate-800 p-3 rounded-xl flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-200 truncate">{v.title}</p>
-                        <p className="text-[10px] text-slate-500">Por: {v.addedBy}</p>
-                      </div>
-                      <span className="text-[10px] font-mono bg-slate-900 border border-slate-700 px-2 py-0.5 rounded text-purple-400">
-                        #{i + 1}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            <QueuePanel
+              newVideoUrl={newVideoUrl}
+              setNewVideoUrl={setNewVideoUrl}
+              handleAddVideo={handleAddVideo}
+              videoQueue={videoQueue}
+            />
           )}
 
-          {/* PESTAÑA 3: BINGO / PREDICCIONES */}
           {activeTab === 'prediction' && (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="bg-gradient-to-br from-purple-900/30 to-indigo-900/30 border border-purple-500/20 rounded-2xl p-4">
@@ -991,7 +582,6 @@ export default function App() {
               </div>
             </div>
           )}
-
         </div>
       </div>
     </div>

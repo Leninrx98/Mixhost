@@ -1,0 +1,139 @@
+import React from 'react';
+import YouTube from 'react-youtube';
+import { SkipBack, Pause, Play, SkipForward, Lock } from 'lucide-react';
+import { OctopusIcon } from './Header';
+
+export default function VideoPlayer({
+  currentVideo,
+  playerRef,
+  volume,
+  isHost,
+  isPlaying,
+  hasPrevious,
+  videoQueue,
+  togglePlayPause,
+  handlePreviousVideo,
+  handleNextVideo,
+  handleSendReaction,
+  socket,
+}) {
+  return (
+    <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4">
+      <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group">
+        {currentVideo ? (
+          <YouTube
+            key={currentVideo.id || currentVideo.url}
+            videoId={currentVideo.url}
+            className="w-full h-full"
+            iframeClassName="w-full h-full"
+            opts={{
+              playerVars: {
+                autoplay: 1,
+                controls: 1,
+                modestbranding: 1,
+                enablejsapi: 1,
+              },
+            }}
+            onReady={(e) => {
+              playerRef.current = e.target;
+              if (typeof e.target.setVolume === 'function') {
+                e.target.setVolume(volume);
+              }
+              e.target.playVideo().catch(() => {
+                console.log('Autoplay requiere interacción del usuario.');
+              });
+            }}
+            onStateChange={(e) => {
+              if (isHost && playerRef.current) {
+                const currentTime = e.target.getCurrentTime();
+                if (e.data === 1) {
+                  socket.emit('host_play', currentTime);
+                } else if (e.data === 2) {
+                  socket.emit('host_pause', currentTime);
+                }
+              }
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-6 text-center bg-slate-950/80">
+            <div className="relative mb-4">
+              <div className="absolute inset-0 bg-purple-600/20 rounded-full blur-xl animate-pulse"></div>
+              <div className="w-24 h-24 bg-slate-900 border border-purple-500/30 rounded-3xl flex items-center justify-center relative shadow-2xl">
+                <OctopusIcon className="w-16 h-16 animate-bounce" />
+              </div>
+            </div>
+            <p className="text-base font-semibold text-slate-300">No hay ningún video reproduciéndose</p>
+            <p className="text-xs text-slate-500 max-w-sm mt-1">
+              Agrega un enlace de YouTube en la pestaña de <span className="text-purple-400 font-medium">Cola</span> para comenzar la transmisión en vivo.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-slate-900/60 backdrop-blur border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex-1 min-w-0 text-center sm:text-left">
+          <h2 className="text-sm font-semibold truncate text-white">
+            {currentVideo ? currentVideo.title : 'Esperando contenido...'}
+          </h2>
+          {currentVideo && (
+            <p className="text-xs text-slate-400 mt-0.5">
+              Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {isHost ? (
+            <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 p-1.5 rounded-xl">
+              <button
+                onClick={handlePreviousVideo}
+                disabled={!hasPrevious}
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                title="Video Anterior"
+              >
+                <SkipBack className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={togglePlayPause}
+                className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-md shadow-purple-600/30 transition transform active:scale-95"
+                title={isPlaying ? 'Pausar' : 'Reproducir'}
+              >
+                {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+              </button>
+
+              <button
+                onClick={handleNextVideo}
+                disabled={videoQueue.length === 0}
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                title="Siguiente Video"
+              >
+                <SkipForward className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Sincronizado con el Host</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-3 flex items-center justify-between gap-2 overflow-x-auto">
+        <span className="text-xs font-semibold text-slate-400 pl-2 whitespace-nowrap">Reaccionar:</span>
+        <div className="flex items-center gap-2">
+          {['🔥', '❤️', '😂', '🎉', '😮', '👏'].map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => handleSendReaction(emoji)}
+              className="w-10 h-10 bg-slate-800/50 hover:bg-purple-600/20 hover:border-purple-500/50 border border-slate-700/40 rounded-xl flex items-center justify-center text-lg transition transform active:scale-90"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
