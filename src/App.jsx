@@ -14,6 +14,7 @@ import Header, { OctopusIcon } from './components/Header';
 import VideoPlayer from './components/VideoPlayer';
 import ChatPanel from './components/ChatPanel';
 import QueuePanel from './components/QueuePanel';
+import Toast from './components/Toast';
 
 const socket = io('http://localhost:3001');
 
@@ -52,6 +53,18 @@ export default function App() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [activeReactions, setActiveReactions] = useState([]);
   const chatBottomRef = useRef(null);
+
+  // Estado para notificaciones efímeras (Toasts)
+  const [systemToast, setSystemToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  const triggerToast = (text) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setSystemToast(text);
+    toastTimerRef.current = setTimeout(() => {
+      setSystemToast(null);
+    }, 3500);
+  };
 
   const [activeTab, setActiveTab] = useState('chat');
 
@@ -112,6 +125,15 @@ export default function App() {
     socket.on('update_participants', (list) => setParticipants(list || []));
     socket.on('host_status', (status) => setIsHost(status));
 
+    // Escuchadores de notificaciones flotantes (Toasts)
+    socket.on('user_joined', (data) => {
+      triggerToast(`📢 ${data.username} se ha unido a la sala`);
+    });
+
+    socket.on('user_left', (data) => {
+      triggerToast(`📢 ${data.username} ha salido de la sala`);
+    });
+
     socket.on('receive_message', (msg) => {
       setMessages((prev) => [...prev, msg]);
     });
@@ -128,6 +150,9 @@ export default function App() {
       setVideoQueue(data.videoQueue || []);
       setHasPrevious(data.hasPreviousVideo);
       setIsPlaying(true);
+      if (data.currentVideo?.title) {
+        triggerToast(`▶️ Reproduciendo: ${data.currentVideo.title}`);
+      }
     });
 
     socket.on('update_queue', (queue) => {
@@ -145,6 +170,7 @@ export default function App() {
         playerRef.current.playVideo();
       }
       setIsPlaying(true);
+      triggerToast("▶️ El Host reanudó la reproducción");
     });
 
     socket.on('sync_pause', (time) => {
@@ -155,6 +181,7 @@ export default function App() {
         }
       }
       setIsPlaying(false);
+      triggerToast("⏸️ El Host pausó la reproducción");
     });
 
     return () => {
@@ -163,6 +190,8 @@ export default function App() {
       socket.off('users_count');
       socket.off('update_participants');
       socket.off('host_status');
+      socket.off('user_joined');
+      socket.off('user_left');
       socket.off('receive_message');
       socket.off('receive_reaction');
       socket.off('sync_video');
@@ -425,7 +454,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-purple-500 selection:text-white relative">
+      <Toast toast={systemToast} />
+
       <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
         {activeReactions.map((r) => (
           <div
