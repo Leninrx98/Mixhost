@@ -202,7 +202,7 @@ export default function App() {
   }, [user, roomId, isCreatingNewRoom]);
 
   useEffect(() => {
-    if (currentVideo && playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+    if (currentVideo && currentVideo.type === 'youtube' && playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
       playerRef.current.loadVideoById(currentVideo.url);
     }
   }, [currentVideo]);
@@ -231,12 +231,6 @@ export default function App() {
     switchTimerRef.current = setTimeout(() => {
       setShowSwitchRoomInput(false);
     }, 250);
-  };
-
-  const extractVideoId = (url) => {
-    if (!url) return null;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    return match ? match[1] : url;
   };
 
   const handleCopyLink = () => {
@@ -304,27 +298,45 @@ export default function App() {
     socket.emit('send_reaction', emoji);
   };
 
+  // Función handleAddVideo actualizada con soporte para YouTube y Twitch
   const handleAddVideo = async (e) => {
     e.preventDefault();
     if (!newVideoUrl.trim() || !user) return;
 
-    const videoId = extractVideoId(newVideoUrl);
-    if (!videoId) {
-      alert('Enlace de YouTube no válido');
-      return;
+    const input = newVideoUrl.trim();
+    let videoId = null;
+    let type = 'youtube';
+    let title = '';
+
+    // Detección de Twitch (Ej: https://www.twitch.tv/ibai)
+    const twitchMatch = input.match(/(?:twitch\.tv\/)([a-zA-Z0-9_]+)/);
+    if (twitchMatch) {
+      type = 'twitch';
+      videoId = twitchMatch[1];
+      title = `Stream de Twitch: ${videoId}`;
+    } else {
+      // Detección de YouTube
+      const ytMatch = input.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+      videoId = ytMatch ? ytMatch[1] : input;
+      title = `Video (${videoId})`;
+
+      try {
+        const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+        const data = await res.json();
+        if (data.title) title = data.title;
+      } catch (err) {
+        console.log('Error fetching YouTube title', err);
+      }
     }
 
-    let title = `Video (${videoId})`;
-    try {
-      const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
-      const data = await res.json();
-      if (data.title) title = data.title;
-    } catch (err) {
-      console.log('Error fetching title', err);
+    if (!videoId) {
+      alert('Enlace no válido de YouTube ni Twitch');
+      return;
     }
 
     socket.emit('add_to_queue', {
       url: videoId,
+      type,
       title,
       addedBy: user.username,
     });

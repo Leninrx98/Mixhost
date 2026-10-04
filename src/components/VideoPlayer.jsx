@@ -1,7 +1,9 @@
 import React from 'react';
 import YouTube from 'react-youtube';
+import { TwitchEmbed } from 'react-twitch-embed';
 import { SkipBack, Pause, Play, SkipForward, Lock } from 'lucide-react';
 import { OctopusIcon } from './Header';
+import Toast from './Toast';
 
 export default function VideoPlayer({
   currentVideo,
@@ -16,44 +18,61 @@ export default function VideoPlayer({
   handleNextVideo,
   handleSendReaction,
   socket,
+  toast,
 }) {
   return (
     <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4">
+      {/* Marco del Reproductor con Notificación Flotante */}
       <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group">
+        <Toast toast={toast} />
+
         {currentVideo ? (
-          <YouTube
-            key={currentVideo.id || currentVideo.url}
-            videoId={currentVideo.url}
-            className="w-full h-full"
-            iframeClassName="w-full h-full"
-            opts={{
-              playerVars: {
-                autoplay: 1,
-                controls: 1,
-                modestbranding: 1,
-                enablejsapi: 1,
-              },
-            }}
-            onReady={(e) => {
-              playerRef.current = e.target;
-              if (typeof e.target.setVolume === 'function') {
-                e.target.setVolume(volume);
-              }
-              e.target.playVideo().catch(() => {
-                console.log('Autoplay requiere interacción del usuario.');
-              });
-            }}
-            onStateChange={(e) => {
-              if (isHost && playerRef.current) {
-                const currentTime = e.target.getCurrentTime();
-                if (e.data === 1) {
-                  socket.emit('host_play', currentTime);
-                } else if (e.data === 2) {
-                  socket.emit('host_pause', currentTime);
+          currentVideo.type === 'twitch' ? (
+            <div className="w-full h-full">
+              <TwitchEmbed
+                channel={currentVideo.url}
+                width="100%"
+                height="100%"
+                autoplay={true}
+                muted={false}
+                theme="dark"
+              />
+            </div>
+          ) : (
+            <YouTube
+              key={currentVideo.id || currentVideo.url}
+              videoId={currentVideo.url}
+              className="w-full h-full"
+              iframeClassName="w-full h-full"
+              opts={{
+                playerVars: {
+                  autoplay: 1,
+                  controls: 1,
+                  modestbranding: 1,
+                  enablejsapi: 1,
+                },
+              }}
+              onReady={(e) => {
+                playerRef.current = e.target;
+                if (typeof e.target.setVolume === 'function') {
+                  e.target.setVolume(volume);
                 }
-              }
-            }}
-          />
+                e.target.playVideo().catch(() => {
+                  console.log('Autoplay requiere interacción del usuario.');
+                });
+              }}
+              onStateChange={(e) => {
+                if (isHost && playerRef.current) {
+                  const currentTime = e.target.getCurrentTime();
+                  if (e.data === 1) {
+                    socket.emit('host_play', currentTime);
+                  } else if (e.data === 2) {
+                    socket.emit('host_pause', currentTime);
+                  }
+                }
+              }}
+            />
+          )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-6 text-center bg-slate-950/80">
             <div className="relative mb-4">
@@ -62,14 +81,15 @@ export default function VideoPlayer({
                 <OctopusIcon className="w-16 h-16 animate-bounce" />
               </div>
             </div>
-            <p className="text-base font-semibold text-slate-300">No hay ningún video reproduciéndose</p>
+            <p className="text-base font-semibold text-slate-300">No hay contenido reproduciéndose</p>
             <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Agrega un enlace de YouTube en la pestaña de <span className="text-purple-400 font-medium">Cola</span> para comenzar la transmisión en vivo.
+              Agrega un enlace de <span className="text-purple-400 font-medium">YouTube</span> o <span className="text-purple-400 font-medium">Twitch</span> en la pestaña de Cola.
             </p>
           </div>
         )}
       </div>
 
+      {/* Barra de Controles e Info */}
       <div className="bg-slate-900/60 backdrop-blur border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex-1 min-w-0 text-center sm:text-left">
           <h2 className="text-sm font-semibold truncate text-white">
@@ -120,6 +140,7 @@ export default function VideoPlayer({
         </div>
       </div>
 
+      {/* Reacciones */}
       <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-3 flex items-center justify-between gap-2 overflow-x-auto">
         <span className="text-xs font-semibold text-slate-400 pl-2 whitespace-nowrap">Reaccionar:</span>
         <div className="flex items-center gap-2">
