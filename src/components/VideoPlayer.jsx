@@ -5,14 +5,29 @@ import { SkipBack, Pause, Play, SkipForward, Lock } from 'lucide-react';
 import { OctopusIcon } from './Header';
 import Toast from './Toast';
 
+// Función para obtener el ID limpio de YouTube
+const getYouTubeId = (url) => {
+  if (!url) return '';
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return match && match[2].length === 11 ? match[2] : url;
+};
+
+// Función para extraer únicamente el nombre de canal de Twitch
+const getTwitchChannel = (url) => {
+  if (!url) return '';
+  const cleaned = url.trim().replace(/(https?:\/\/)?(www\.)?twitch\.tv\//, '');
+  return cleaned.split('/')[0].split('?')[0];
+};
+
 export default function VideoPlayer({
   currentVideo,
   playerRef,
-  volume,
+  volume = 100,
   isHost,
   isPlaying,
   hasPrevious,
-  videoQueue,
+  videoQueue = [],
   togglePlayPause,
   handlePreviousVideo,
   handleNextVideo,
@@ -20,40 +35,45 @@ export default function VideoPlayer({
   socket,
   toast,
 }) {
+  const isTwitch = currentVideo?.type === 'twitch';
+  const youtubeId = !isTwitch && currentVideo ? getYouTubeId(currentVideo.url) : null;
+  const twitchChannel = isTwitch && currentVideo ? getTwitchChannel(currentVideo.url) : null;
+
   return (
     <div className="flex-1 flex flex-col p-4 lg:p-6 overflow-y-auto space-y-4">
-      {/* Marco del Reproductor con Notificación Flotante */}
+      {/* Marco del Reproductor */}
       <div className="relative w-full aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group">
         <Toast toast={toast} />
 
         {currentVideo ? (
-          currentVideo.type === 'twitch' ? (
+          isTwitch && twitchChannel ? (
             <div className="w-full h-full">
               <TwitchEmbed
-                channel={currentVideo.url}
+                channel={twitchChannel}
                 width="100%"
                 height="100%"
                 autoplay={true}
                 muted={false}
                 theme="dark"
+                parent={['localhost', '127.0.0.1']}
               />
             </div>
-          ) : (
+          ) : youtubeId ? (
             <YouTube
-              key={currentVideo.id || currentVideo.url}
-              videoId={currentVideo.url}
+              key={youtubeId}
+              videoId={youtubeId}
               className="w-full h-full"
               iframeClassName="w-full h-full"
               opts={{
                 playerVars: {
                   autoplay: 1,
-                  controls: 1,
+                  controls: 1, // Permite controles locales (volumen, subtítulos, calidad) para todos
                   modestbranding: 1,
                   enablejsapi: 1,
                 },
               }}
               onReady={(e) => {
-                playerRef.current = e.target;
+                if (playerRef) playerRef.current = e.target;
                 if (typeof e.target.setVolume === 'function') {
                   e.target.setVolume(volume);
                 }
@@ -62,8 +82,8 @@ export default function VideoPlayer({
                 });
               }}
               onStateChange={(e) => {
-                if (isHost && playerRef.current) {
-                  const currentTime = e.target.getCurrentTime();
+                if (isHost && socket) {
+                  const currentTime = e.target.getCurrentTime ? e.target.getCurrentTime() : 0;
                   if (e.data === 1) {
                     socket.emit('host_play', currentTime);
                   } else if (e.data === 2) {
@@ -72,6 +92,10 @@ export default function VideoPlayer({
                 }
               }}
             />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-rose-400 font-semibold">
+              Enlace de video no válido
+            </div>
           )
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-6 text-center bg-slate-950/80">
@@ -93,11 +117,11 @@ export default function VideoPlayer({
       <div className="bg-slate-900/60 backdrop-blur border border-slate-800/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex-1 min-w-0 text-center sm:text-left">
           <h2 className="text-sm font-semibold truncate text-white">
-            {currentVideo ? currentVideo.title : 'Esperando contenido...'}
+            {currentVideo ? currentVideo.title || currentVideo.url : 'Esperando contenido...'}
           </h2>
           {currentVideo && (
             <p className="text-xs text-slate-400 mt-0.5">
-              Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy}</span>
+              Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy || 'Usuario'}</span>
             </p>
           )}
         </div>
@@ -116,7 +140,8 @@ export default function VideoPlayer({
 
               <button
                 onClick={togglePlayPause}
-                className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-md shadow-purple-600/30 transition transform active:scale-95"
+                disabled={!currentVideo}
+                className="p-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-md shadow-purple-600/30 transition transform active:scale-95 disabled:opacity-40"
                 title={isPlaying ? 'Pausar' : 'Reproducir'}
               >
                 {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
@@ -124,7 +149,7 @@ export default function VideoPlayer({
 
               <button
                 onClick={handleNextVideo}
-                disabled={videoQueue.length === 0}
+                disabled={!videoQueue || videoQueue.length === 0}
                 className="p-2 hover:bg-slate-800 rounded-lg text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
                 title="Siguiente Video"
               >
@@ -147,7 +172,7 @@ export default function VideoPlayer({
           {['🔥', '❤️', '😂', '🎉', '😮', '👏'].map((emoji) => (
             <button
               key={emoji}
-              onClick={() => handleSendReaction(emoji)}
+              onClick={() => handleSendReaction && handleSendReaction(emoji)}
               className="w-10 h-10 bg-slate-800/50 hover:bg-purple-600/20 hover:border-purple-500/50 border border-slate-700/40 rounded-xl flex items-center justify-center text-lg transition transform active:scale-90"
             >
               {emoji}
