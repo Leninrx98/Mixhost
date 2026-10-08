@@ -63,12 +63,15 @@ export default function VideoPlayer({
               key={youtubeId}
               videoId={youtubeId}
               className="w-full h-full"
-              iframeClassName="w-full h-full"
+              iframeClassName="w-full h-full border-0"
               opts={{
                 playerVars: {
                   autoplay: 1,
-                  controls: 1, // Permite controles locales (volumen, subtítulos, calidad) para todos
+                  controls: 1,
                   modestbranding: 1,
+                  rel: 0,
+                  fs: 1,
+                  iv_load_policy: 3,
                   enablejsapi: 1,
                 },
               }}
@@ -162,22 +165,6 @@ export default function VideoPlayer({
               <span>Sincronizado con el Host</span>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Reacciones */}
-      <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-3 flex items-center justify-between gap-2 overflow-x-auto">
-        <span className="text-xs font-semibold text-slate-400 pl-2 whitespace-nowrap">Reaccionar:</span>
-        <div className="flex items-center gap-2">
-          {['🔥', '❤️', '😂', '🎉', '😮', '👏'].map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => handleSendReaction && handleSendReaction(emoji)}
-              className="w-10 h-10 bg-slate-800/50 hover:bg-purple-600/20 hover:border-purple-500/50 border border-slate-700/40 rounded-xl flex items-center justify-center text-lg transition transform active:scale-90"
-            >
-              {emoji}
-            </button>
-          ))}
         </div>
       </div>
     </div>

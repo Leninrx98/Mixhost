@@ -54,7 +54,8 @@ export default function App() {
   const [activeReactions, setActiveReactions] = useState([]);
   const chatBottomRef = useRef(null);
 
-  // Estado para notificaciones efímeras (Toasts)
+  const [activePoll, setActivePoll] = useState(null);
+
   const [systemToast, setSystemToast] = useState(null);
   const toastTimerRef = useRef(null);
 
@@ -79,10 +80,10 @@ export default function App() {
 
   const tabSessionIdRef = useRef('');
   if (!tabSessionIdRef.current) {
-    let sId = sessionStorage.getItem('mixhost_session_id');
+    let sId = localStorage.getItem('mixhost_session_id');
     if (!sId) {
       sId = 'usr_' + Math.random().toString(36).substring(2, 9);
-      sessionStorage.setItem('mixhost_session_id', sId);
+      localStorage.setItem('mixhost_session_id', sId);
     }
     tabSessionIdRef.current = sId;
   }
@@ -90,6 +91,25 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
+
+    const savedSession = localStorage.getItem('mixhost_active_session');
+    if (savedSession) {
+      try {
+        const { username, avatar, roomId: savedRoomId } = JSON.parse(savedSession);
+        const targetRoom = roomParam || savedRoomId;
+
+        if (targetRoom && username) {
+          setRoomId(targetRoom);
+          setUser({ username, avatar });
+          setIsCreatingNewRoom(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Error al leer sesión previa:", err);
+        localStorage.removeItem('mixhost_active_session');
+      }
+    }
+
     if (roomParam) {
       setRoomId(roomParam);
     }
@@ -97,6 +117,15 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !roomId) return;
+
+    localStorage.setItem(
+      'mixhost_active_session',
+      JSON.stringify({
+        username: user.username,
+        avatar: user.avatar,
+        roomId: roomId,
+      })
+    );
 
     socket.emit('join_room', {
       roomId,
@@ -113,19 +142,20 @@ export default function App() {
       setCurrentVideo(data.currentVideo);
       setVideoQueue(data.videoQueue || []);
       setHasPrevious(data.hasPreviousVideo);
+      setActivePoll(data.activePoll || null);
       setRoomError(null);
     });
 
     socket.on('room_error', (data) => {
       setRoomError(data.message);
       setUser(null);
+      localStorage.removeItem('mixhost_active_session');
     });
 
     socket.on('users_count', (count) => setConnectedCount(count));
     socket.on('update_participants', (list) => setParticipants(list || []));
     socket.on('host_status', (status) => setIsHost(status));
 
-    // Escuchadores de notificaciones flotantes (Toasts)
     socket.on('user_joined', (data) => {
       triggerToast(`📢 ${data.username} se ha unido a la sala`);
     });
@@ -136,6 +166,11 @@ export default function App() {
 
     socket.on('receive_message', (msg) => {
       setMessages((prev) => [...prev, msg]);
+    });
+
+    socket.on('chat_cleared', () => {
+      setMessages([]);
+      triggerToast('🧹 El Host ha limpiado el historial del chat');
     });
 
     socket.on('receive_reaction', (reaction) => {
@@ -157,6 +192,21 @@ export default function App() {
 
     socket.on('update_queue', (queue) => {
       setVideoQueue(queue);
+    });
+
+    socket.on('poll_started', (poll) => {
+      setActivePoll(poll);
+      triggerToast('📊 ¡Se ha iniciado una votación para la cola!');
+    });
+
+    socket.on('poll_updated', (poll) => {
+      setActivePoll(poll);
+    });
+
+    socket.on('poll_finished', ({ videoQueue }) => {
+      setActivePoll(null);
+      setVideoQueue(videoQueue);
+      triggerToast('🎉 ¡Votación finalizada y cola reordenada!');
     });
 
     socket.on('sync_play', (time) => {
@@ -193,9 +243,13 @@ export default function App() {
       socket.off('user_joined');
       socket.off('user_left');
       socket.off('receive_message');
+      socket.off('chat_cleared');
       socket.off('receive_reaction');
       socket.off('sync_video');
       socket.off('update_queue');
+      socket.off('poll_started');
+      socket.off('poll_updated');
+      socket.off('poll_finished');
       socket.off('sync_play');
       socket.off('sync_pause');
     };
@@ -206,10 +260,6 @@ export default function App() {
       playerRef.current.loadVideoById(currentVideo.url);
     }
   }, [currentVideo]);
-
-  useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   const handleMouseEnterInvite = () => {
     if (inviteTimerRef.current) clearTimeout(inviteTimerRef.current);
@@ -259,6 +309,15 @@ export default function App() {
     setShowSwitchRoomInput(false);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('mixhost_active_session');
+    socket.emit('leave_room', { roomId });
+    window.history.pushState({}, '', window.location.pathname);
+    setUser(null);
+    setRoomId('');
+    setIsHost(false);
+  };
+
   const handleCreateNewRoom = (e) => {
     e.preventDefault();
     if (!tempName.trim()) return;
@@ -287,6 +346,16 @@ export default function App() {
     });
   };
 
+  const handlePromoteToHost = (targetSocketId, targetSessionId) => {
+    if (!isHost) return;
+    socket.emit('promote_to_host', { targetSocketId, targetSessionId });
+  };
+
+  const handleClearChat = () => {
+    if (!isHost) return;
+    socket.emit('clear_chat');
+  };
+
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || !user) return;
@@ -298,7 +367,6 @@ export default function App() {
     socket.emit('send_reaction', emoji);
   };
 
-  // Función handleAddVideo actualizada con soporte para YouTube y Twitch
   const handleAddVideo = async (e) => {
     e.preventDefault();
     if (!newVideoUrl.trim() || !user) return;
@@ -308,14 +376,12 @@ export default function App() {
     let type = 'youtube';
     let title = '';
 
-    // Detección de Twitch (Ej: https://www.twitch.tv/ibai)
     const twitchMatch = input.match(/(?:twitch\.tv\/)([a-zA-Z0-9_]+)/);
     if (twitchMatch) {
       type = 'twitch';
       videoId = twitchMatch[1];
       title = `Stream de Twitch: ${videoId}`;
     } else {
-      // Detección de YouTube
       const ytMatch = input.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
       videoId = ytMatch ? ytMatch[1] : input;
       title = `Video (${videoId})`;
@@ -330,7 +396,16 @@ export default function App() {
     }
 
     if (!videoId) {
-      alert('Enlace no válido de YouTube ni Twitch');
+      triggerToast('⚠️ Enlace no válido de YouTube ni Twitch');
+      return;
+    }
+
+    const isDuplicateInQueue = videoQueue.some((v) => v.url === videoId || v.url === input);
+    const isCurrentlyPlaying = currentVideo && (currentVideo.url === videoId || currentVideo.url === input);
+
+    if (isDuplicateInQueue || isCurrentlyPlaying) {
+      triggerToast('⚠️ Este video ya se encuentra en la cola o en reproducción. Intenta agregar otro.');
+      setNewVideoUrl('');
       return;
     }
 
@@ -342,6 +417,25 @@ export default function App() {
     });
 
     setNewVideoUrl('');
+  };
+
+  const handleStartPoll = () => {
+    if (!isHost) return;
+    socket.emit('start_queue_poll');
+  };
+
+  const handleVoteItem = (videoId) => {
+    if (!activePoll) return;
+    socket.emit('vote_queue_item', {
+      pollId: activePoll.id,
+      videoId,
+      sessionId: tabSessionIdRef.current,
+    });
+  };
+
+  const handleFinishPoll = () => {
+    if (!isHost) return;
+    socket.emit('finish_queue_poll');
   };
 
   const togglePlayPause = () => {
@@ -378,11 +472,11 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950">
+      <div className="h-screen w-screen bg-slate-950 text-white flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/40 via-slate-950 to-slate-950 overflow-hidden">
         <div className="max-w-md w-full bg-slate-900/80 backdrop-blur-xl p-8 rounded-3xl border border-slate-800 shadow-2xl text-center relative overflow-hidden">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
           
-          <div className="w-20 h-20 bg-slate-950 border border-purple-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-purple-600/20">
+          <div className="w-20 h-20 bg-slate-950 border border-purple-500/30 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-purple-600/20">
             <OctopusIcon className="w-14 h-14 animate-bounce" />
           </div>
 
@@ -394,7 +488,7 @@ export default function App() {
           </p>
 
           {roomError && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-400 text-xs text-left">
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-2 text-red-400 text-xs text-left">
               <ShieldAlert className="w-4 h-4 flex-shrink-0" />
               <span>{roomError}</span>
             </div>
@@ -410,7 +504,7 @@ export default function App() {
                 value={tempName}
                 onChange={(e) => setTempName(e.target.value)}
                 placeholder="Ej. Luis P."
-                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition-all text-sm"
+                className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition-all text-sm"
                 maxLength={20}
                 required
               />
@@ -418,12 +512,12 @@ export default function App() {
 
             {roomId ? (
               <div className="space-y-3 pt-2">
-                <p className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-xl py-2 px-3">
+                <p className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-2xl py-2 px-3">
                   Te estás uniendo a la sala: <span className="font-mono font-bold text-white">#{roomId}</span>
                 </p>
                 <button
                   onClick={handleJoinExistingRoom}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-lg shadow-purple-600/25 transition-all active:scale-95 text-sm"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-2xl shadow-lg shadow-purple-600/25 transition-all active:scale-95 text-sm"
                 >
                   Entrar a la Sala
                 </button>
@@ -432,7 +526,7 @@ export default function App() {
               <div className="space-y-4 pt-2 border-t border-slate-800">
                 <button
                   onClick={handleCreateNewRoom}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-xl shadow-lg shadow-purple-600/25 transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-2xl shadow-lg shadow-purple-600/25 transition-all active:scale-95 text-sm flex items-center justify-center gap-2"
                 >
                   <Plus className="w-4 h-4" /> Crear una Sala Nueva (Serás el Host)
                 </button>
@@ -448,11 +542,11 @@ export default function App() {
                     value={inputRoomId}
                     onChange={(e) => setInputRoomId(e.target.value)}
                     placeholder="Código de sala (Ej. g8s9dx)"
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
                   />
                   <button
                     onClick={handleJoinExistingRoom}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-xl transition"
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-2xl transition"
                   >
                     Unirme
                   </button>
@@ -465,8 +559,10 @@ export default function App() {
     );
   }
 
+  const hasVotedActivePoll = activePoll?.votedSessionIds?.includes(tabSessionIdRef.current);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-purple-500 selection:text-white relative">
+    <div className="h-screen max-h-screen w-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-purple-500 selection:text-white relative overflow-hidden">
       <Toast toast={systemToast} />
 
       <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
@@ -502,9 +598,11 @@ export default function App() {
         setSwitchRoomCode={setSwitchRoomCode}
         showParticipantsTooltip={showParticipantsTooltip}
         setShowParticipantsTooltip={setShowParticipantsTooltip}
+        onPromoteToHost={handlePromoteToHost}
+        onLogout={handleLogout}
       />
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1920px] w-full mx-auto">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden max-w-[1920px] w-full mx-auto h-[calc(100vh-4rem)]">
         <VideoPlayer
           currentVideo={currentVideo}
           playerRef={playerRef}
@@ -520,11 +618,11 @@ export default function App() {
           socket={socket}
         />
 
-        <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-slate-900/30 flex flex-col h-[500px] lg:h-auto">
-          <div className="flex border-b border-slate-800 bg-slate-900/60 p-2 gap-1">
+        <div className="w-full lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-slate-900/30 flex flex-col h-full overflow-hidden">
+          <div className="flex border-b border-slate-800 bg-slate-900/60 p-2 gap-1 flex-shrink-0">
             <button
               onClick={() => setActiveTab('chat')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-2xl text-xs font-semibold transition ${
                 activeTab === 'chat'
                   ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -536,7 +634,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('queue')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition relative ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-2xl text-xs font-semibold transition relative ${
                 activeTab === 'queue'
                   ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -548,7 +646,7 @@ export default function App() {
 
             <button
               onClick={() => setActiveTab('prediction')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-2xl text-xs font-semibold transition ${
                 activeTab === 'prediction'
                   ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -568,6 +666,8 @@ export default function App() {
               inputMsg={inputMsg}
               setInputMsg={setInputMsg}
               handleSendMessage={handleSendMessage}
+              isHost={isHost}
+              onClearChat={handleClearChat}
             />
           )}
 
@@ -577,12 +677,18 @@ export default function App() {
               setNewVideoUrl={setNewVideoUrl}
               handleAddVideo={handleAddVideo}
               videoQueue={videoQueue}
+              isHost={isHost}
+              activePoll={activePoll}
+              hasVotedActivePoll={hasVotedActivePoll}
+              handleStartPoll={handleStartPoll}
+              handleVoteItem={handleVoteItem}
+              handleFinishPoll={handleFinishPoll}
             />
           )}
 
           {activeTab === 'prediction' && (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="bg-gradient-to-br from-purple-900/30 to-indigo-900/30 border border-purple-500/20 rounded-2xl p-4">
+              <div className="bg-gradient-to-br from-purple-900/30 to-indigo-900/30 border border-purple-500/20 rounded-3xl p-4">
                 <div className="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-wider mb-2">
                   <Sparkles className="w-4 h-4" />
                   Predicción Activa
@@ -593,7 +699,7 @@ export default function App() {
                   <button
                     onClick={() => handleVote('A')}
                     disabled={prediction.userVoted !== null}
-                    className={`w-full p-3 rounded-xl border text-left flex items-center justify-between text-xs transition ${
+                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between text-xs transition ${
                       prediction.userVoted === 'A'
                         ? 'bg-purple-600/30 border-purple-500 text-white'
                         : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
@@ -606,7 +712,7 @@ export default function App() {
                   <button
                     onClick={() => handleVote('B')}
                     disabled={prediction.userVoted !== null}
-                    className={`w-full p-3 rounded-xl border text-left flex items-center justify-between text-xs transition ${
+                    className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between text-xs transition ${
                       prediction.userVoted === 'B'
                         ? 'bg-purple-600/30 border-purple-500 text-white'
                         : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
