@@ -14,6 +14,49 @@ const io = new Server(server, {
   },
 });
 
+const normalizeText = (text) => {
+  if (!text) return '';
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+};
+
+const INITIAL_IDEAS_POOL = [
+  'Aparece un invitado especial',
+  'Discurso de más de 3 minutos',
+  'Fallo técnico de sonido',
+  'Mencionan al público',
+  'Chiste sobre Inteligencia Artificial',
+  'Alguien llora en el escenario',
+  'Ropa de color rojo brillante',
+  'Mencionan una película clásica',
+  'Se cae un micrófono u objeto',
+  'Problemas de iluminación',
+  'Risa fuerte de la audiencia',
+  'Agradecen a la familia',
+  'Alguien olvida lo que iba a decir',
+  'Mencionan las redes sociales',
+  'Abrazo emotivo entre presentadores',
+  'Premio inesperado o sorpresa',
+  'Broma sobre la organización',
+  'Referencia a un meme viral',
+  'Alguien lee sus notas en el celular',
+  'Cantan un fragmento de canción',
+  'Comentario sobre la comida del evento',
+  'Interrupción por aplausos largos',
+  'Alguien tropieza al subir al escenario',
+  'Mencionan el clima o la lluvia',
+  'Grito entusiasta entre el público',
+  'Presentador confunde un nombre',
+  'Gesto de corazón con las manos',
+  'Selfie en vivo desde el escenario',
+  'Referencia al café o energía',
+  'Agradecimiento especial al equipo técnico'
+];
+
 const rooms = {};
 
 io.on('connection', (socket) => {
@@ -40,6 +83,15 @@ io.on('connection', (socket) => {
         historyQueue: [],
         hasPreviousVideo: false,
         activePoll: null,
+        bingoState: {
+          status: 'idle',
+          size: 16,
+          ideasPool: [...INITIAL_IDEAS_POOL],
+          pendingValidations: [],
+          approvedClaims: {},
+          scores: {},
+          userCards: {}
+        }
       };
     }
 
@@ -77,12 +129,136 @@ io.on('connection', (socket) => {
       videoQueue: room.videoQueue,
       hasPreviousVideo: room.hasPreviousVideo,
       activePoll: room.activePoll,
+      bingoState: room.bingoState
     });
 
     io.to(roomId).emit('users_count', Object.keys(room.users).length);
     io.to(roomId).emit('update_participants', Object.values(room.users));
   });
 
+  // --- EVENTOS DEL BINGO ---
+  socket.on('bingo_start_draft', ({ roomId, size }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    room.bingoState.status = 'draft';
+    room.bingoState.size = size || 16;
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+    io.to(roomId).emit('bingo_notification', { text: `🎲 El Host ha iniciado la fase de armado de Bingo (${size} casillas)` });
+  });
+
+  socket.on('bingo_add_idea', ({ roomId, text, author }) => {
+    if (!rooms[roomId] || !text) return;
+    const room = rooms[roomId];
+
+    const trimmedText = text.trim();
+    const normalizedInput = normalizeText(trimmedText);
+
+    // Comparación normalizada
+    const exists = room.bingoState.ideasPool.some(
+      (i) => normalizeText(i) === normalizedInput
+    );
+
+    if (exists) {
+      socket.emit('bingo_notification', { text: `⚠️ La opción "${trimmedText}" ya existe en el banco.` });
+    } else {
+      room.bingoState.ideasPool.push(trimmedText);
+      io.to(roomId).emit('bingo_updated', room.bingoState);
+      io.to(roomId).emit('bingo_notification', { text: `💡 ${author} sugirió: "${trimmedText}"` });
+    }
+  });
+
+  socket.on('bingo_update_card', ({ roomId, username, card }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    if (!room.bingoState.userCards) {
+      room.bingoState.userCards = {};
+    }
+    room.bingoState.userCards[username] = card;
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+  });
+
+  socket.on('bingo_start_game', ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    room.bingoState.status = 'playing';
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+    io.to(roomId).emit('bingo_notification', { text: '🚀 ¡Arrancó el Bingo! Marca tus eventos al ocurrir.' });
+  });
+
+  socket.on('bingo_claim_point', ({ roomId, username, cellText, cellIndex }) => {
+    if (!rooms[roomId] || !cellText) return;
+    const room = rooms[roomId];
+    
+    const isAlreadyApproved = (room.bingoState.approvedClaims[username] || []).includes(cellIndex);
+    const isAlreadyPending = room.bingoState.pendingValidations.some(
+      (v) => v.username === username && v.cellIndex === cellIndex
+    );
+
+    if (isAlreadyApproved || isAlreadyPending) return;
+
+    const validation = {
+      id: Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      username,
+      cellText,
+      cellIndex
+    };
+
+    room.bingoState.pendingValidations.push(validation);
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+  });
+
+  socket.on('bingo_validate_point', ({ roomId, validationId, approved }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+
+    const valIndex = room.bingoState.pendingValidations.findIndex(v => v.id === validationId);
+    if (valIndex !== -1) {
+      const val = room.bingoState.pendingValidations[valIndex];
+      room.bingoState.pendingValidations.splice(valIndex, 1);
+
+      if (approved) {
+        if (!room.bingoState.approvedClaims) room.bingoState.approvedClaims = {};
+        if (!room.bingoState.approvedClaims[val.username]) room.bingoState.approvedClaims[val.username] = [];
+        
+        if (!room.bingoState.approvedClaims[val.username].includes(val.cellIndex)) {
+          room.bingoState.approvedClaims[val.username].push(val.cellIndex);
+          room.bingoState.scores[val.username] = (room.bingoState.scores[val.username] || 0) + 100;
+          
+          io.to(roomId).emit('bingo_notification', { 
+            text: `🎯 ${val.username} atinó: "${val.cellText}"` 
+          });
+        }
+      }
+
+      io.to(roomId).emit('bingo_updated', room.bingoState);
+    }
+  });
+
+  socket.on('bingo_finish_game', ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    room.bingoState.status = 'finished';
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+    io.to(roomId).emit('bingo_notification', { text: '🏆 ¡El Bingo ha finalizado!' });
+  });
+
+  socket.on('bingo_reset_game', ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    room.bingoState = {
+      status: 'idle',
+      size: 16,
+      ideasPool: [...INITIAL_IDEAS_POOL],
+      pendingValidations: [],
+      approvedClaims: {},
+      scores: {},
+      userCards: {}
+    };
+    io.to(roomId).emit('bingo_updated', room.bingoState);
+    io.to(roomId).emit('bingo_notification', { text: '🔄 El Host ha reiniciado el módulo de Bingo para una nueva partida.' });
+  });
+
+  // --- OTROS EVENTOS EXISTENTES ---
   socket.on('promote_to_host', ({ targetSocketId, targetSessionId }) => {
     if (!currentRoom || !rooms[currentRoom]) return;
     const room = rooms[currentRoom];
