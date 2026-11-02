@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { MessageSquare, Plus, Tv, Sparkles, ShieldAlert } from 'lucide-react';
+import { MessageSquare, Plus, Tv, Sparkles, ShieldAlert, Palette } from 'lucide-react';
 
 import Header, { OctopusIcon } from './components/Header';
 import VideoPlayer from './components/VideoPlayer';
@@ -8,6 +8,10 @@ import ChatPanel from './components/ChatPanel';
 import QueuePanel from './components/QueuePanel';
 import BingoPanel from './components/BingoPanel';
 import Toast from './components/Toast';
+
+import MixiAvatar from './components/mixi/MixiAvatar';
+import MixiBuilderModal from './components/mixi/MixiBuilderModal';
+import { getSavedMixi, saveMixi } from './components/mixi/mixiUtils';
 
 const socket = io('http://localhost:3001');
 
@@ -18,6 +22,10 @@ export default function App() {
   const [inputRoomId, setInputRoomId] = useState('');
   const [isCreatingNewRoom, setIsCreatingNewRoom] = useState(false);
   const [roomError, setRoomError] = useState(null);
+
+  // ESTADO DE MIXI
+  const [mixiConfig, setMixiConfig] = useState(getSavedMixi());
+  const [isMixiModalOpen, setIsMixiModalOpen] = useState(false);
 
   const [isHost, setIsHost] = useState(false);
   const [connectedCount, setConnectedCount] = useState(1);
@@ -94,12 +102,14 @@ export default function App() {
     const savedSession = localStorage.getItem('mixhost_active_session');
     if (savedSession) {
       try {
-        const { username, avatar, roomId: savedRoomId } = JSON.parse(savedSession);
+        const { username, avatar, roomId: savedRoomId, mixiConfig: savedMixi } = JSON.parse(savedSession);
         const targetRoom = roomParam || savedRoomId;
 
         if (targetRoom && username) {
+          const currentMixi = savedMixi || getSavedMixi();
           setRoomId(targetRoom);
-          setUser({ username, avatar });
+          setMixiConfig(currentMixi);
+          setUser({ username, avatar, mixiConfig: currentMixi });
           setIsCreatingNewRoom(false);
           return;
         }
@@ -122,6 +132,7 @@ export default function App() {
       JSON.stringify({
         username: user.username,
         avatar: user.avatar,
+        mixiConfig: user.mixiConfig,
         roomId: roomId,
       })
     );
@@ -130,6 +141,7 @@ export default function App() {
       roomId,
       username: user.username,
       avatar: user.avatar,
+      mixiConfig: user.mixiConfig,
       sessionId: tabSessionIdRef.current,
       isCreatingNew: isCreatingNewRoom,
     });
@@ -328,6 +340,17 @@ export default function App() {
     setIsHost(false);
   };
 
+  const handleSaveMixiConfig = (newConfig) => {
+    setMixiConfig(newConfig);
+    saveMixi(newConfig);
+    if (user) {
+      setUser((prev) => ({
+        ...prev,
+        mixiConfig: newConfig
+      }));
+    }
+  };
+
   const handleCreateNewRoom = (e) => {
     e.preventDefault();
     if (!tempName.trim()) return;
@@ -338,6 +361,7 @@ export default function App() {
     setUser({
       username: tempName.trim(),
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(tempName.trim() + tabSessionIdRef.current)}`,
+      mixiConfig
     });
   };
 
@@ -353,6 +377,7 @@ export default function App() {
     setUser({
       username: tempName.trim(),
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(tempName.trim() + tabSessionIdRef.current)}`,
+      mixiConfig
     });
   };
 
@@ -369,7 +394,7 @@ export default function App() {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || !user) return;
-    socket.emit('send_message', { user: user.username, text: inputMsg, isSystem: false });
+    socket.emit('send_message', { user: user.username, text: inputMsg, isSystem: false, mixiConfig: user.mixiConfig });
     setInputMsg('');
   };
 
@@ -476,8 +501,17 @@ export default function App() {
         <div className="max-w-md w-full bg-slate-900/80 backdrop-blur-xl p-8 rounded-3xl border border-slate-800 shadow-2xl text-center relative overflow-hidden">
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
           
-          <div className="w-20 h-20 bg-slate-950 border border-purple-500/30 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-purple-600/20">
-            <OctopusIcon className="w-14 h-14 animate-bounce" />
+          <div className="relative inline-block mb-2 group">
+            <div className="p-3 bg-slate-950 border border-purple-500/30 rounded-3xl shadow-xl shadow-purple-600/20 inline-block">
+              <MixiAvatar config={mixiConfig} size={80} />
+            </div>
+            <button
+              onClick={() => setIsMixiModalOpen(true)}
+              className="absolute -bottom-1 -right-1 bg-purple-600 hover:bg-purple-500 text-white p-2 rounded-2xl shadow-lg border border-purple-400/30 transition flex items-center gap-1 text-[10px] font-bold"
+              title="Personalizar tu pulpo Mixi"
+            >
+              <Palette className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight mb-1 bg-gradient-to-r from-white via-slate-200 to-purple-300 bg-clip-text text-transparent">
@@ -555,6 +589,13 @@ export default function App() {
             )}
           </div>
         </div>
+
+        <MixiBuilderModal
+          isOpen={isMixiModalOpen}
+          onClose={() => setIsMixiModalOpen(false)}
+          initialConfig={mixiConfig}
+          onSave={handleSaveMixiConfig}
+        />
       </div>
     );
   }
@@ -580,6 +621,7 @@ export default function App() {
       <Header
         roomId={roomId}
         user={user}
+        setUser={setUser}
         isHost={isHost}
         connectedCount={connectedCount}
         participants={participants}
