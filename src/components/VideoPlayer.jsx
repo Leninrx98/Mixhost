@@ -2,10 +2,9 @@ import React from 'react';
 import YouTube from 'react-youtube';
 import { TwitchEmbed } from 'react-twitch-embed';
 import { SkipBack, Pause, Play, SkipForward, Lock } from 'lucide-react';
-import { OctopusIcon } from './Header';
 import Toast from './Toast';
+import VideoPlaceholderAnimation from './VideoPlaceholderAnimation';
 
-// Función para obtener el ID limpio de YouTube
 const getYouTubeId = (url) => {
   if (!url) return '';
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -13,7 +12,6 @@ const getYouTubeId = (url) => {
   return match && match[2].length === 11 ? match[2] : url;
 };
 
-// Función para extraer únicamente el nombre de canal de Twitch
 const getTwitchChannel = (url) => {
   if (!url) return '';
   const cleaned = url.trim().replace(/(https?:\/\/)?(www\.)?twitch\.tv\//, '');
@@ -41,7 +39,7 @@ export default function VideoPlayer({
 
   return (
     <div className="flex-1 flex flex-col p-3 lg:p-4 overflow-hidden min-h-0 h-full justify-between gap-3">
-      {/* Marco del Reproductor */}
+      {/* Marco del Reproductor: Muestra únicamente la animación limpia de la sala sin texto encima */}
       <div className="relative w-full aspect-video max-h-[65vh] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl group flex-1">
         <Toast toast={toast} />
 
@@ -101,30 +99,27 @@ export default function VideoPlayer({
             </div>
           )
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-6 text-center bg-slate-950/80">
-            <div className="relative mb-4">
-              <div className="absolute inset-0 bg-purple-600/20 rounded-full blur-xl animate-pulse"></div>
-              <div className="w-20 h-20 bg-slate-900 border border-purple-500/30 rounded-3xl flex items-center justify-center relative shadow-2xl">
-                <OctopusIcon className="w-12 h-12 animate-bounce" />
-              </div>
-            </div>
-            <p className="text-sm font-semibold text-slate-300">No hay contenido reproduciéndose</p>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Agrega un enlace de <span className="text-purple-400 font-medium">YouTube</span> o <span className="text-purple-400 font-medium">Twitch</span> en la pestaña de Cola.
-            </p>
+          <div className="w-full h-full bg-slate-950 overflow-hidden">
+            <VideoPlaceholderAnimation />
           </div>
         )}
       </div>
 
-      {/* Barra de Controles e Info */}
+      {/* Barra de Controles e Info: Aquí es donde se reflejará el mensaje justo en la zona que indicaste */}
       <div className="bg-slate-900/60 backdrop-blur border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between gap-3 flex-shrink-0">
         <div className="flex-1 min-w-0">
-          <h2 className="text-xs font-semibold truncate text-white">
-            {currentVideo ? currentVideo.title || currentVideo.url : 'Esperando contenido...'}
-          </h2>
-          {currentVideo && (
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy || 'Usuario'}</span>
+          {currentVideo ? (
+            <>
+              <h2 className="text-xs font-semibold truncate text-white">
+                {currentVideo.title || currentVideo.url}
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Agregado por: <span className="text-purple-400 font-medium">{currentVideo.addedBy || 'Usuario'}</span>
+              </p>
+            </>
+          ) : (
+            <p className="text-xs font-medium text-slate-300">
+              No hay contenido reproduciéndose • Agrega un enlace de <span className="text-purple-400 font-semibold">YouTube</span> o <span className="text-purple-400 font-semibold">Twitch</span> en la Cola
             </p>
           )}
         </div>

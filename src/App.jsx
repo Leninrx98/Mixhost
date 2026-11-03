@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { MessageSquare, Plus, Tv, Sparkles, ShieldAlert, Palette } from 'lucide-react';
 
-import Header, { OctopusIcon } from './components/Header';
+import Header from './components/Header';
 import VideoPlayer from './components/VideoPlayer';
 import ChatPanel from './components/ChatPanel';
 import QueuePanel from './components/QueuePanel';
@@ -12,6 +12,7 @@ import Toast from './components/Toast';
 import MixiAvatar from './components/mixi/MixiAvatar';
 import MixiBuilderModal from './components/mixi/MixiBuilderModal';
 import { getSavedMixi, saveMixi } from './components/mixi/mixiUtils';
+import MixiHeroAnimation from './components/MixiHeroAnimation';
 
 const socket = io('http://localhost:3001');
 
@@ -392,9 +393,18 @@ export default function App() {
   };
 
   const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (!inputMsg.trim() || !user) return;
-    socket.emit('send_message', { user: user.username, text: inputMsg, isSystem: false, mixiConfig: user.mixiConfig });
+    if (e && e.preventDefault) e.preventDefault();
+
+    const textToSend = e?.directMessage || inputMsg;
+    if (!textToSend || !textToSend.trim() || !user) return;
+
+    socket.emit('send_message', {
+      user: user.username,
+      text: textToSend,
+      isSystem: false,
+      mixiConfig: user.mixiConfig,
+    });
+
     setInputMsg('');
   };
 
@@ -502,16 +512,9 @@ export default function App() {
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
           
           <div className="relative inline-block mb-2 group">
-            <div className="p-3 bg-slate-950 border border-purple-500/30 rounded-3xl shadow-xl shadow-purple-600/20 inline-block">
-              <MixiAvatar config={mixiConfig} size={80} />
+            <div className="p-2 bg-slate-950 border border-purple-500/30 rounded-3xl shadow-xl shadow-purple-600/20 inline-block overflow-hidden">
+              <MixiHeroAnimation className="w-24 h-24 rounded-2xl" />
             </div>
-            <button
-              onClick={() => setIsMixiModalOpen(true)}
-              className="absolute -bottom-1 -right-1 bg-purple-600 hover:bg-purple-500 text-white p-2 rounded-2xl shadow-lg border border-purple-400/30 transition flex items-center gap-1 text-[10px] font-bold"
-              title="Personalizar tu pulpo Mixi"
-            >
-              <Palette className="w-3.5 h-3.5" />
-            </button>
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight mb-1 bg-gradient-to-r from-white via-slate-200 to-purple-300 bg-clip-text text-transparent">

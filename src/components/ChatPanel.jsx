@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Info, Smile, Send, Trash2, ArrowDown } from 'lucide-react';
+import AnimatedEmote from './AnimatedEmote';
+import { EMOTES_DATA } from '../data/emotes';
 
 export default function ChatPanel({
   messages,
@@ -15,8 +17,8 @@ export default function ChatPanel({
   const chatContainerRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [selectedTab, setSelectedTab] = useState('mixi');
 
-  // Detectar el scroll interno dentro del chat
   const handleScroll = () => {
     if (!chatContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
@@ -28,7 +30,6 @@ export default function ChatPanel({
     }
   };
 
-  // Autoscroll inteligente
   useEffect(() => {
     if (isAtBottom) {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,9 +44,65 @@ export default function ChatPanel({
     setHasNewMessages(false);
   };
 
+  // Selección y envío inmediato del emote al chat
+  const handleEmoteSelect = (emote) => {
+    const emoteText = `:${emote.character}_${emote.id}:`;
+    
+    if (handleSendMessage) {
+      handleSendMessage({
+        preventDefault: () => {},
+        directMessage: emoteText
+      });
+    }
+    
+    setShowEmojiPicker(false);
+  };
+
+  const renderMessageContent = (text) => {
+    if (!text) return null;
+    const regex = /:([a-zA-Z0-9]+)_(emote_\d+):/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+
+      const character = match[1];
+      const emoteId = match[2];
+      const emoteConfig = EMOTES_DATA[character]?.find((e) => e.id === emoteId);
+      const totalFrames = emoteConfig ? emoteConfig.totalFrames : 4;
+
+      parts.push(
+        <AnimatedEmote
+          key={`${character}-${emoteId}-${match.index}`}
+          character={character}
+          emoteId={emoteId}
+          totalFrames={totalFrames}
+          className="w-16 h-16 inline-block align-middle my-1"
+        />
+      );
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts;
+  };
+
+  const onSubmitForm = (e) => {
+    e.preventDefault();
+    if (!inputMsg.trim()) return;
+    handleSendMessage(e);
+  };
+
   return (
     <div className="flex-1 flex flex-col justify-between overflow-hidden relative h-full">
-      {/* Cabecera del chat */}
       <div className="px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between flex-shrink-0">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
           Mensajes en vivo
@@ -62,7 +119,6 @@ export default function ChatPanel({
         )}
       </div>
 
-      {/* Contenedor de mensajes aislado con scroll */}
       <div
         ref={chatContainerRef}
         onScroll={handleScroll}
@@ -87,8 +143,8 @@ export default function ChatPanel({
                 <span className="text-[10px] text-purple-400 font-semibold mb-0.5">
                   {m.user}
                 </span>
-                <div className="bg-slate-800/70 border border-slate-700/40 rounded-2xl rounded-tl-none px-3.5 py-2 text-slate-200 max-w-[85%] self-start break-words shadow-sm">
-                  {m.text}
+                <div className="bg-slate-800/70 border border-slate-700/40 rounded-2xl rounded-tl-none px-3.5 py-2 text-slate-200 max-w-[85%] self-start break-words shadow-sm flex items-center flex-wrap gap-1">
+                  {renderMessageContent(m.text)}
                 </div>
               </div>
             )
@@ -97,7 +153,6 @@ export default function ChatPanel({
         <div ref={chatBottomRef} />
       </div>
 
-      {/* Botón flotante para bajar rápido */}
       {hasNewMessages && !isAtBottom && (
         <button
           onClick={scrollToBottom}
@@ -108,27 +163,45 @@ export default function ChatPanel({
         </button>
       )}
 
-      {/* Selector de Emojis */}
       {showEmojiPicker && (
-        <div className="absolute bottom-16 left-3 right-3 bg-slate-900 border border-slate-800 rounded-3xl p-2.5 shadow-2xl grid grid-cols-6 gap-2 z-50">
-          {['😊', '🚀', '⭐', '🎶', '😎', '🍿', '🔥', '❤️', '👍', '🥳', '💯', '🙌'].map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => {
-                setInputMsg((prev) => prev + emoji);
-                setShowEmojiPicker(false);
-              }}
-              className="p-2 hover:bg-slate-800 rounded-2xl text-center text-lg transition"
-            >
-              {emoji}
-            </button>
-          ))}
+        <div className="absolute bottom-16 left-3 right-3 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-3xl p-3 shadow-2xl z-50 flex flex-col gap-2.5">
+          <div className="flex gap-1 border-b border-slate-800 pb-2">
+            {['mixi', 'glo', 'roxy'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSelectedTab(tab)}
+                className={`flex-1 py-1 text-[11px] font-semibold rounded-xl capitalize transition ${
+                  selectedTab === tab
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+            {EMOTES_DATA[selectedTab]?.map((emote) => (
+              <button
+                key={`${emote.character}-${emote.id}`}
+                onClick={() => handleEmoteSelect(emote)}
+                className="p-1.5 hover:bg-slate-800/80 rounded-2xl transition transform active:scale-90 flex items-center justify-center border border-slate-800/50 hover:border-purple-500/40"
+              >
+                <AnimatedEmote
+                  character={emote.character}
+                  emoteId={emote.id}
+                  totalFrames={emote.totalFrames}
+                  className="w-10 h-10"
+                />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Input de envío */}
       <form
-        onSubmit={handleSendMessage}
+        onSubmit={onSubmitForm}
         className="p-3 border-t border-slate-800 bg-slate-900/80 flex gap-2 items-center flex-shrink-0"
       >
         <button

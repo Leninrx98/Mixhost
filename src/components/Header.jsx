@@ -3,48 +3,7 @@ import { Share2, Check, Copy, ArrowRight, Users, Crown, LogOut, Sparkles } from 
 import MixiAvatar from './mixi/MixiAvatar';
 import MixiBuilderModal from './mixi/MixiBuilderModal';
 import { saveMixi } from './mixi/mixiUtils';
-
-export const OctopusIcon = ({ className = "w-8 h-8" }) => (
-  <svg
-    viewBox="0 0 64 64"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <path
-      d="M32 6C18.7452 6 8 16.7452 8 30C8 37.5 11.5 44 17 48V52C17 54.2091 18.7909 56 21 56C23.2091 56 25 54.2091 25 52V50C27.2 50.6 29.5 51 32 51C34.5 51 36.8 50.6 39 50V52C39 54.2091 40.7909 56 43 56C45.2091 56 47 54.2091 47 52V48C52.5 44 56 37.5 56 30C56 16.7452 45.2548 6 32 6Z"
-      fill="url(#octo_grad)"
-    />
-    <circle cx="23" cy="28" r="4.5" fill="#FFFFFF" />
-    <circle cx="23" cy="28" r="2" fill="#0F172A" />
-    <circle cx="41" cy="28" r="4.5" fill="#FFFFFF" />
-    <circle cx="41" cy="28" r="2" fill="#0F172A" />
-    <path
-      d="M27 36C27 36 29.5 39 32 39C34.5 39 37 36 37 36"
-      stroke="#FFFFFF"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-    />
-    <path
-      d="M13 46C11 49 10 53 12 56C14 59 18 57 19 53"
-      stroke="#9333EA"
-      strokeWidth="3"
-      strokeLinecap="round"
-    />
-    <path
-      d="M51 46C53 49 54 53 52 56C50 59 46 57 45 53"
-      stroke="#9333EA"
-      strokeWidth="3"
-      strokeLinecap="round"
-    />
-    <defs>
-      <linearGradient id="octo_grad" x1="8" y1="6" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#C084FC" />
-        <stop offset="1" stopColor="#7E22CE" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
+import MixiHeroAnimation from './MixiHeroAnimation';
 
 export default function Header({
   roomId,
@@ -99,8 +58,8 @@ export default function Header({
     <>
       <header className="h-16 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-950 border border-purple-500/30 rounded-2xl flex items-center justify-center shadow-md shadow-purple-500/20">
-            <OctopusIcon className="w-7 h-7" />
+          <div className="w-11 h-11 bg-slate-950 border border-purple-500/30 rounded-2xl flex items-center justify-center shadow-md shadow-purple-500/20 overflow-hidden">
+            <MixiHeroAnimation className="w-full h-full" />
           </div>
           <div className="flex items-center gap-2">
             <h1 className="font-bold text-base tracking-wide text-white hidden sm:block">MixHost</h1>
