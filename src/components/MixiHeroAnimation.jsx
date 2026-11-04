@@ -1,28 +1,25 @@
 import React, { useState, useEffect } from 'react';
 
-const mixiFrames = [
-  "/Fotos Mixy/Mixi place holder .png",
-  "/Fotos Mixy/Mixi place holder 2.png",
-  "/Fotos Mixy/Mixi place holder 3.png",
-  "/Fotos Mixy/Mixi place holder 4.png"
-];
-
-export default function MixiHeroAnimation({ className = "w-full h-full" }) {
-  const [currentFrame, setCurrentFrame] = useState(0);
+export default function MixiHeroAnimation({ className = "w-48 h-48" }) {
+  const [currentFrame, setCurrentFrame] = useState(1);
+  const totalFrames = 8;
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentFrame((prev) => (prev + 1) % mixiFrames.length);
-    }, 650); // <--- Un número más alto hace que la animación vaya más lenta y pausada
+      setCurrentFrame((prev) => (prev % totalFrames) + 1);
+    }, 250);
 
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <img 
-      src={mixiFrames[currentFrame]} 
-      alt="Mixi Animación" 
-      className={`${className} w-full h-full object-cover`}
-    />
+    <div className="relative w-48 h-48 md:w-52 md:h-52 flex items-center justify-center shrink-0 overflow-hidden">
+      <img
+        src={`/mixi_hero/frame_${currentFrame}.png`}
+        alt="Mixi Hero Animation"
+        onError={() => setCurrentFrame(1)}
+        className="w-full h-full object-contain select-none filter drop-shadow-[0_4px_16px_rgba(168,85,247,0.4)] pointer-events-none"
+      />
+    </div>
   );
 }

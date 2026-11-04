@@ -3,7 +3,7 @@ import { Share2, Check, Copy, ArrowRight, Users, Crown, LogOut, Sparkles } from 
 import MixiAvatar from './mixi/MixiAvatar';
 import MixiBuilderModal from './mixi/MixiBuilderModal';
 import { saveMixi } from './mixi/mixiUtils';
-import MixiHeroAnimation from './MixiHeroAnimation';
+import MixiNavbarAnimation from './MixiNavbarAnimation';
 
 export default function Header({
   roomId,
@@ -58,9 +58,8 @@ export default function Header({
     <>
       <header className="h-16 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-slate-950 border border-purple-500/30 rounded-2xl flex items-center justify-center shadow-md shadow-purple-500/20 overflow-hidden">
-            <MixiHeroAnimation className="w-full h-full" />
-          </div>
+          {/* Componente dedicado para el avatar animado del Navbar */}
+          <MixiNavbarAnimation />
           <div className="flex items-center gap-2">
             <h1 className="font-bold text-base tracking-wide text-white hidden sm:block">MixHost</h1>
             
