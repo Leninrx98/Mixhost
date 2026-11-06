@@ -64,7 +64,8 @@ io.on('connection', (socket) => {
   let currentUsername = null;
 
   socket.on('join_room', (data) => {
-    const { roomId, username, avatar, sessionId, isCreatingNew } = data;
+    // Recibimos mixiConfig / avatarId si viene desde el cliente
+    const { roomId, username, avatar, mixiConfig, sessionId, isCreatingNew } = data;
 
     if (!roomId) return;
 
@@ -110,10 +111,13 @@ io.on('connection', (socket) => {
 
     const isHost = room.hostSessionIds.includes(sessionId);
 
+    // Guardamos la configuración de avatar/skin del usuario
     room.users[socket.id] = {
       id: socket.id,
       username,
       avatar,
+      mixiConfig: mixiConfig || avatar,
+      avatarId: mixiConfig?.avatarId || avatar,
       sessionId,
       isHost,
       joinedAt: Date.now(),
@@ -136,6 +140,24 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('update_participants', Object.values(room.users));
   });
 
+  // --- EVENTO PARA ACTUALIZAR AVATAR/SKIN EN TIEMPO REAL ---
+  socket.on('update-avatar', ({ roomId, mixiConfig }) => {
+    const targetRoom = roomId || currentRoom;
+    if (!targetRoom || !rooms[targetRoom]) return;
+
+    const room = rooms[targetRoom];
+    const user = room.users[socket.id];
+
+    if (user) {
+      user.mixiConfig = mixiConfig;
+      user.avatarId = mixiConfig?.avatarId || mixiConfig;
+      user.avatar = mixiConfig?.image || mixiConfig;
+
+      // Emitir la lista de participantes actualizada a todos los integrantes
+      io.to(targetRoom).emit('update_participants', Object.values(room.users));
+    }
+  });
+
   // --- EVENTOS DEL BINGO ---
   socket.on('bingo_start_draft', ({ roomId, size }) => {
     if (!rooms[roomId]) return;
@@ -153,7 +175,6 @@ io.on('connection', (socket) => {
     const trimmedText = text.trim();
     const normalizedInput = normalizeText(trimmedText);
 
-    // Comparación normalizada
     const exists = room.bingoState.ideasPool.some(
       (i) => normalizeText(i) === normalizedInput
     );

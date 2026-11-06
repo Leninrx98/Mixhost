@@ -29,6 +29,7 @@ export default function Header({
   setShowParticipantsTooltip,
   onPromoteToHost,
   onLogout,
+  socket // Pasamos la instancia de socket activa
 }) {
   const participantsTimerRef = useRef(null);
   const [isMixiModalOpen, setIsMixiModalOpen] = useState(false);
@@ -45,12 +46,24 @@ export default function Header({
   };
 
   const handleSaveMixi = (newMixiConfig) => {
+    // 1. Guardar localmente
     saveMixi(newMixiConfig);
+
+    // 2. Actualizar estado local del usuario
     if (setUser) {
       setUser((prev) => ({
         ...prev,
         mixiConfig: newMixiConfig
       }));
+    }
+
+    // 3. Emitir el cambio en tiempo real al servidor
+    const activeSocket = socket || window.socket;
+    if (activeSocket) {
+      activeSocket.emit("update-avatar", {
+        roomId,
+        mixiConfig: newMixiConfig
+      });
     }
   };
 
@@ -183,11 +196,10 @@ export default function Header({
                       participants.map((p, idx) => (
                         <div key={p.id || idx} className="flex items-center justify-between text-xs py-1.5 px-2 rounded-xl hover:bg-slate-800/50">
                           <div className="flex items-center gap-2 truncate">
-                            {p.mixiConfig ? (
-                              <MixiAvatar config={p.mixiConfig} size={24} />
-                            ) : (
-                              <img src={p.avatar} alt="avatar" className="w-5 h-5 rounded-full bg-slate-800 border border-purple-500/30" />
-                            )}
+                            <MixiAvatar 
+                              config={p.mixiConfig || p.avatarId || p.avatar} 
+                              size={22} 
+                            />
                             <span className="text-slate-200 font-medium truncate">{p.username}</span>
                           </div>
                           
@@ -222,16 +234,12 @@ export default function Header({
               className="flex items-center gap-2 cursor-pointer p-1 rounded-2xl hover:bg-slate-800/60 transition group"
               title="Haz clic para personalizar tu Mixi"
             >
-              {user.mixiConfig ? (
-                <div className="relative">
-                  <MixiAvatar config={user.mixiConfig} size={36} />
-                  <div className="absolute -bottom-1 -right-1 bg-purple-600 rounded-full p-0.5 text-white shadow-sm opacity-80 group-hover:opacity-100 transition">
-                    <Sparkles className="w-2.5 h-2.5" />
-                  </div>
+              <div className="relative">
+                <MixiAvatar config={user.mixiConfig || user.avatarId || user.avatar} size={36} />
+                <div className="absolute -bottom-1 -right-1 bg-purple-600 rounded-full p-0.5 text-white shadow-sm opacity-80 group-hover:opacity-100 transition">
+                  <Sparkles className="w-2.5 h-2.5" />
                 </div>
-              ) : (
-                <img src={user.avatar} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-800 border border-purple-500/30" />
-              )}
+              </div>
 
               <div className="hidden md:block text-left">
                 <p className="text-xs font-semibold leading-tight flex items-center gap-1 text-slate-100">
